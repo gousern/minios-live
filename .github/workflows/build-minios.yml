@@ -369,8 +369,9 @@ jobs:
       - name: Build MiniOS ISO
         working-directory: ./minios-live
         run: |
-          # Keep system in English, no -l or -ml flags
-          sudo ./minios-cmd -d trixie -a amd64 -de xfce -pv standard -dkms -kl -comp zstd
+          # -tz Asia/Taipei: Set timezone
+          # -c zstd: Use ZSTD compression
+          sudo ./minios-cmd -d trixie -a amd64 -de xfce -pv standard -dkms -kl -c zstd -tz Asia/Taipei
 
       - name: Collect ISO files
         run: |
