@@ -11,7 +11,7 @@ jobs:
     
     steps:
       - name: Clone MiniOS repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: minios-linux/minios-live
           path: minios-live
