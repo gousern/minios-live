@@ -64,6 +64,8 @@ jobs:
 
       - name: Create custom installation script
         run: |
+          mkdir -p ./minios-live/config/hooks/normal/
+          
           cat > ./minios-live/config/hooks/normal/01-install-custom-packages.chroot << 'EOF'
           #!/bin/bash
           set -e
@@ -117,6 +119,11 @@ jobs:
           LC_ALL=en_US.UTF-8
           LOCEOF
           
+          echo "=== Cleaning package cache to reduce ISO size ==="
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
+          rm -rf /var/cache/apt/*.bin
+          
           echo "=== Verifying installations ==="
           git --version || echo "WARNING: Git not installed"
           qemu-system-x86_64 --version || echo "WARNING: QEMU not installed"
@@ -124,6 +131,10 @@ jobs:
           date || echo "WARNING: Date check failed"
           locale -a | grep zh_TW || echo "WARNING: zh_TW.UTF-8 locale not found"
           fc-list | grep -i noto || echo "WARNING: Noto fonts not found"
+          
+          echo "=== Disk usage after cleanup ==="
+          df -h /
+          du -sh /var/cache/apt /var/lib/apt/lists 2>/dev/null || echo "Cache directories cleaned"
           
           echo "Package installation completed successfully"
           EOF
@@ -295,6 +306,7 @@ jobs:
       - name: Configure mise in .bashrc
         run: |
           # Configure for root user
+          mkdir -p ./minios-live/config/includes.chroot/root/
           cat >> ./minios-live/config/includes.chroot/root/.bashrc << 'EOF'
           
           # Mise configuration
@@ -303,6 +315,7 @@ jobs:
           EOF
           
           # Configure for live user
+          mkdir -p ./minios-live/config/includes.chroot/home/live/
           cat >> ./minios-live/config/includes.chroot/home/live/.bashrc << 'EOF'
           
           # Mise configuration
@@ -367,7 +380,7 @@ jobs:
           ls -lh ./output/
 
       - name: Upload ISO as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: minios-custom.iso
           path: ./output/*.iso
