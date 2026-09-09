@@ -1,17 +1,528 @@
-- name: Install minios-tools from official APT repo
-  run: |
-    # Download and add MiniOS GPG key from the master branch
-    sudo curl -fsSL https://github.com/minios-linux/deb/raw/refs/heads/master/minios-linux.asc -o /etc/apt/trusted.gpg.d/minios-linux.gpg
+name: Build MiniOS Custom ISO (Official Tools)
 
-    # Add the repository
-    sudo bash -c 'echo "deb http://deb.minios.dev/debian bookworm main contrib non-free" > /etc/apt/sources.list.d/minios-linux.list'
-    sudo bash -c 'echo "deb http://deb.minios.dev/debian generic main contrib non-free" >> /etc/apt/sources.list.d/minios-linux.list'
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
 
-    # Update and install minios-tools
-    sudo apt-get update
-    sudo apt-get install -y minios-tools
+permissions:
+  contents: write
+  actions: read
 
-    # Verify installation
-    echo "=== Verifying script2sb installation ==="
-    which script2sb
-    script2sb --help || echo "script2sb installed successfully"
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Clone MiniOS repository
+        uses: actions/checkout@v5
+        with:
+          repository: minios-linux/minios-live
+          path: minios-live
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            debootstrap xorriso genisoimage binutils squashfs-tools \
+            grub-pc-bin grub-efi-amd64-bin dosfstools mtools xz-utils zstd \
+            rsync gettext curl wget gpg
+
+      - name: Install minios-tools from official APT repo
+        run: |
+          # Download and add MiniOS GPG key from the master branch
+          sudo curl -fsSL https://github.com/minios-linux/deb/raw/refs/heads/master/minios-linux.asc -o /etc/apt/trusted.gpg.d/minios-linux.gpg
+
+          # Add the repository
+          sudo bash -c 'echo "deb http://deb.minios.dev/debian bookworm main contrib non-free" > /etc/apt/sources.list.d/minios-linux.list'
+          sudo bash -c 'echo "deb http://deb.minios.dev/debian generic main contrib non-free" >> /etc/apt/sources.list.d/minios-linux.list'
+
+          # Update and install minios-tools
+          sudo apt-get update
+          sudo apt-get install -y minios-tools
+
+          # Verify installation
+          echo "=== Verifying script2sb installation ==="
+          which script2sb
+          script2sb --help || echo "script2sb installed successfully"
+
+      - name: Create custom build script for script2sb
+        run: |
+          cd minios-live
+          
+          cat > build-custom-module.sh << 'BUILDSCRIPT'
+          #!/bin/bash
+          set -e
+          
+          echo "=== Starting custom module build with script2sb ==="
+          
+          # ============================================
+          # 1. Update package lists
+          # ============================================
+          apt-get update
+          
+          # ============================================
+          # 2. Install all packages
+          # ============================================
+          echo "=== Installing packages ==="
+          
+          # Applications
+          apt-get install -y \
+            git curl wget ca-certificates vim htop neofetch \
+            tree unzip zip p7zip-full rsync
+          
+          # Development tools
+          apt-get install -y \
+            build-essential cmake gdb make python3 python3-pip \
+            python3-venv nodejs npm docker.io docker-compose \
+            qemu-system-x86 qemu-utils qemu-kvm ovmf \
+            wireguard-tools openresolv
+          
+          # Chinese support
+          apt-get install -y \
+            fonts-noto-cjk fonts-noto-color-emoji fonts-wqy-zenhei \
+            fonts-wqy-microhei fonts-liberation fonts-dejavu \
+            ibus ibus-chewing ibus-gtk ibus-gtk3 ibus-qt4 \
+            language-pack-zh-hans language-pack-zh-hant \
+            language-selector-common oneko
+          
+          # ============================================
+          # 3. Cloudflare repository (optional)
+          # ============================================
+          # Add Cloudflare GPG key
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+            -o /usr/share/keyrings/cloudflare-archive-keyring.gpg
+          
+          # Add Cloudflare repository
+          echo 'deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/ trixie main' \
+            > /etc/apt/sources.list.d/cloudflare.list
+          
+          # Install Cloudflare Warp (optional)
+          apt-get update || true
+          apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
+          
+          # ============================================
+          # 4. Fontconfig - Chinese fonts preference
+          # ============================================
+          mkdir -p /etc/fonts/conf.d/
+          cat > /etc/fonts/conf.d/99-language-selector-zh.conf << 'FONTCONF'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+              <alias>
+                  <family>sans-serif</family>
+                  <prefer>
+                      <family>Noto Sans CJK TC</family>
+                      <family>WenQuanYi Zen Hei</family>
+                      <family>Noto Sans</family>
+                  </prefer>
+              </alias>
+              <alias>
+                  <family>serif</family>
+                  <prefer>
+                      <family>Noto Serif CJK TC</family>
+                      <family>WenQuanYi Zen Hei</family>
+                      <family>Noto Serif</family>
+                  </prefer>
+              </alias>
+              <alias>
+                  <family>monospace</family>
+                  <prefer>
+                      <family>Noto Sans Mono CJK TC</family>
+                      <family>WenQuanYi Zen Hei Mono</family>
+                      <family>Noto Mono</family>
+                  </prefer>
+              </alias>
+          </fontconfig>
+          FONTCONF
+          
+          # ============================================
+          # 5. IBus configuration
+          # ============================================
+          cat > /etc/default/ibus << 'IBUSCFG'
+          IBUS_ENABLE_CTRL_ALT_GR=1
+          IBUSCFG
+          
+          # ============================================
+          # 6. X11 keyboard configuration
+          # ============================================
+          mkdir -p /etc/X11/xorg.conf.d/
+          cat > /etc/X11/xorg.conf.d/00-keyboard.conf << 'XKB'
+          Section "InputClass"
+              Identifier "keyboard"
+              MatchIsKeyboard "on"
+              Option "XkbLayout" "us,cn"
+              Option "XkbVariant" "mac,"
+              Option "XkbOptions" "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
+          EndSection
+          XKB
+          
+          # ============================================
+          # 7. macOS style key mapping
+          # ============================================
+          mkdir -p /etc/X11/xmodmap/
+          cat > /etc/X11/xmodmap/macos.xmodmap << 'XMODMAP'
+          ! macOS style keyboard mapping
+          clear control
+          clear mod1
+          clear mod4
+          clear lock
+          
+          ! Alt -> Cmd (Super), Win -> Alt (Option)
+          keycode 64  = Alt_L Meta_L
+          keycode 133 = Super_L
+          keycode 134 = Super_R
+          keycode 108 = Alt_R Meta_R
+          
+          ! CapsLock -> Control
+          keycode 66  = Control_L
+          
+          ! Navigation keys
+          keycode 110 = Home
+          keycode 115 = End
+          keycode 112 = Prior
+          keycode 117 = Next
+          
+          ! Reassign modifier keys
+          add control = Control_L Control_R
+          add mod1    = Alt_L Meta_L Alt_R Meta_R
+          add mod4    = Super_L Super_R
+          add lock    = Caps_Lock
+          XMODMAP
+          
+          # ============================================
+          # 8. GTK shortcuts (macOS style)
+          # ============================================
+          mkdir -p /etc/gtk-3.0/
+          cat > /etc/gtk-3.0/accels.scm << 'GTKACCELS'
+          ; GTK macOS style shortcuts (Cmd -> Super)
+          (gtk_accel_path "<Actions>/GeditWindow/New" "<Super>n")
+          (gtk_accel_path "<Actions>/GeditWindow/Open" "<Super>o")
+          (gtk_accel_path "<Actions>/GeditWindow/Save" "<Super>s")
+          (gtk_accel_path "<Actions>/GeditWindow/SaveAs" "<Super><Shift>s")
+          (gtk_accel_path "<Actions>/GeditWindow/Close" "<Super>w")
+          (gtk_accel_path "<Actions>/GeditWindow/Quit" "<Super>q")
+          (gtk_accel_path "<Actions>/GeditWindow/Undo" "<Super>z")
+          (gtk_accel_path "<Actions>/GeditWindow/Redo" "<Super><Shift>z")
+          (gtk_accel_path "<Actions>/GeditWindow/Cut" "<Super>x")
+          (gtk_accel_path "<Actions>/GeditWindow/Copy" "<Super>c")
+          (gtk_accel_path "<Actions>/GeditWindow/Paste" "<Super>v")
+          (gtk_accel_path "<Actions>/GeditWindow/SelectAll" "<Super>a")
+          (gtk_accel_path "<Actions>/GeditWindow/Find" "<Super>f")
+          (gtk_accel_path "<Actions>/GeditWindow/Replace" "<Super>r")
+          GTKACCELS
+          
+          # ============================================
+          # 9. User autostart configuration
+          # ============================================
+          mkdir -p /home/live/.config/autostart/
+          cat > /home/live/.config/autostart/custom-settings.desktop << 'AUTOSTART'
+          [Desktop Entry]
+          Type=Application
+          Name=Custom Settings
+          Exec=/bin/bash -c "/home/live/.config/autostart/custom-settings.sh"
+          Hidden=false
+          NoDisplay=false
+          X-GNOME-Autostart-enabled=true
+          AUTOSTART
+          
+          cat > /home/live/.config/autostart/custom-settings.sh << 'AUTOSCRIPT'
+          #!/bin/bash
+          
+          # Set resolution
+          xrandr -s 1280x800 2>/dev/null || true
+          
+          # Load keyboard mapping
+          setxkbmap -layout us,cn -variant mac, -option "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
+          
+          if [ -f /etc/X11/xmodmap/macos.xmodmap ]; then
+              xmodmap /etc/X11/xmodmap/macos.xmodmap
+          fi
+          
+          # Start IBus for Chinese input
+          if command -v ibus-daemon &> /dev/null; then
+              ibus-daemon -drx &
+          fi
+          
+          # Start oneko
+          if command -v oneko &> /dev/null; then
+              oneko &
+          fi
+          
+          exit 0
+          AUTOSCRIPT
+          chmod +x /home/live/.config/autostart/custom-settings.sh
+          
+          # ============================================
+          # 10. User .bashrc configuration
+          # ============================================
+          cat >> /home/live/.bashrc << 'BASHRC'
+          
+          # Custom PATH
+          export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
+          
+          # Timezone
+          export TZ="Asia/Taipei"
+          
+          # IBus environment for Chinese input
+          export GTK_IM_MODULE=ibus
+          export QT_IM_MODULE=ibus
+          export XMODIFIERS=@im=ibus
+          
+          # Mise (if installed)
+          if [ -f "$HOME/.local/bin/mise" ]; then
+              eval "$(mise activate bash)"
+          fi
+          BASHRC
+          
+          # ============================================
+          # 11. Create ~/bin directory
+          # ============================================
+          mkdir -p /home/live/bin/
+          chown live:live /home/live/bin/
+          
+          # ============================================
+          # 12. Locale and Timezone
+          # ============================================
+          echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
+          echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+          locale-gen
+          update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
+          
+          echo "Asia/Taipei" > /etc/timezone
+          dpkg-reconfigure -f noninteractive tzdata
+          ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime 2>/dev/null || true
+          
+          # ============================================
+          # 13. Enable services
+          # ============================================
+          systemctl enable docker 2>/dev/null || true
+          
+          # Add live user to docker group
+          usermod -aG docker live 2>/dev/null || true
+          
+          # ============================================
+          # 14. Install Mise (optional)
+          # ============================================
+          if command -v curl &> /dev/null; then
+              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          fi
+          
+          # ============================================
+          # 15. DKMS modules (optional)
+          # ============================================
+          if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
+              apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
+              dkms autoinstall || echo "WARNING: DKMS build failed"
+          fi
+          
+          # ============================================
+          # 16. FULL CLEANUP (to minimize module size)
+          # ============================================
+          echo "=== Full cleanup started ==="
+          apt-get clean
+          apt-get autoclean
+          apt-get autoremove --purge -y
+          rm -rf /var/lib/apt/lists/*
+          rm -rf /var/cache/apt/*.bin
+          rm -rf /var/cache/apt/archives/*.deb
+          rm -rf /tmp/*
+          rm -rf /var/tmp/*
+          find /var/log -type f -name "*.log" -exec truncate -s 0 {} \; 2>/dev/null || true
+          rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
+          rm -rf /usr/share/man/* 2>/dev/null || true
+          rm -rf /usr/share/doc/* 2>/dev/null || true
+          rm -rf /usr/share/info/* 2>/dev/null || true
+          rm -rf /usr/share/gnome/help/* 2>/dev/null || true
+          find /usr/share/locale -mindepth 1 -maxdepth 1 -type d \
+            ! -name "en" ! -name "en_US" ! -name "zh" ! -name "zh_TW" ! -name "locale.alias" \
+            -exec rm -rf {} \; 2>/dev/null || true
+          find /usr/share -name "*.pyc" -delete 2>/dev/null || true
+          find /usr/share -name "__pycache__" -type d -exec rm -rf {} \; 2>/dev/null || true
+          rm -f /root/.bash_history /home/live/.bash_history 2>/dev/null || true
+          
+          # Extra cleanup
+          rm -rf /lib/modules/*/kernel/drivers/staging 2>/dev/null || true
+          rm -rf /lib/modules/*/kernel/drivers/media 2>/dev/null || true
+          rm -rf /usr/src/linux-headers-* 2>/dev/null || true
+          rm -rf /usr/lib/xorg/modules/drivers/*_drv.so 2>/dev/null || true
+          find /usr/share/fonts -type f \( -name "*.pcf" -o -name "*.pcf.gz" \) -delete 2>/dev/null || true
+          find /usr/share/icons -mindepth 1 -maxdepth 1 -type d \
+            ! -name "hicolor" ! -name "default" ! -name "Adwaita" \
+            -exec rm -rf {} \; 2>/dev/null || true
+          find /usr/share/themes -mindepth 1 -maxdepth 1 -type d \
+            ! -name "Default" ! -name "Adwaita" \
+            -exec rm -rf {} \; 2>/dev/null || true
+          rm -rf /usr/share/sounds/* 2>/dev/null || true
+          rm -rf /usr/share/backgrounds/* 2>/dev/null || true
+          rm -rf /usr/share/applications/*.desktop 2>/dev/null || true
+          
+          echo "=== Cleanup completed ==="
+          echo "=== Disk usage after full cleanup ==="
+          df -h /
+          du -sh /usr/share 2>/dev/null || echo "usr/share cleaned"
+          
+          echo "=== Custom build script completed ==="
+          BUILDSCRIPT
+          
+          chmod +x build-custom-module.sh
+
+      - name: Build custom .sb module using script2sb
+        working-directory: ./minios-live
+        run: |
+          # Build the custom module on top of all existing modules (level 5)
+          # This creates 06-custom-amd64.sb
+          sudo script2sb -s ./build-custom-module.sh -l 5 -n 06-custom-amd64.sb -c zstd
+          
+          # Check if module was created
+          if [ -f "06-custom-amd64.sb" ]; then
+            echo "=== Module created successfully ==="
+            ls -lh 06-custom-amd64.sb
+          else
+            echo "ERROR: Module not created!"
+            exit 1
+          fi
+
+      - name: Build full MiniOS ISO
+        working-directory: ./minios-live
+        run: |
+          # First, build the base ISO with all standard modules
+          sudo ./minios-cmd -d trixie -a amd64 -de xfce -pv standard -dkms -kl -c zstd -tz Asia/Taipei
+          
+          # Copy custom module to the ISO build directory
+          mkdir -p build/iso/live/
+          cp 06-custom-amd64.sb build/iso/live/
+          
+          # Rebuild the ISO with the custom module
+          cd build/iso
+          sudo xorriso -as mkisofs \
+            -r -V "MiniOS Custom" \
+            -J -joliet-long \
+            -cache-inodes \
+            -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+            -b isolinux/isolinux.bin \
+            -c isolinux/boot.cat \
+            -boot-load-size 4 -boot-info-table -no-emul-boot \
+            -eltorito-alt-boot -e boot/grub/efi.img \
+            -no-emul-boot -isohybrid-gpt-basdat \
+            -o ../../minios-custom.iso .
+          
+          cd ../..
+          echo "=== ISO created ==="
+          ls -lh minios-custom.iso
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p ./output
+          
+          # Copy ISO and SB files
+          find ./minios-live -maxdepth 1 \( -name "*.iso" -o -name "*.sb" \) -exec cp {} ./output/ \;
+          
+          echo "=== Output files ==="
+          ls -lh ./output/
+          
+          # Create checksums
+          cd ./output
+          sha256sum *.{iso,sb} 2>/dev/null > checksums.txt || true
+          cd ..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v5
+        with:
+          name: minios-custom
+          path: |
+            ./output/*.iso
+            ./output/*.sb
+            ./output/*.txt
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: success() && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      actions: read
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: minios-custom
+          path: ./
+      
+      - name: Get ISO filename
+        id: iso
+        run: |
+          ISO_FILE=$(ls *.iso 2>/dev/null | head -1)
+          echo "filename=$ISO_FILE" >> $GITHUB_OUTPUT
+          echo "Found ISO: $ISO_FILE"
+      
+      - name: Get SB filename
+        id: sb
+        run: |
+          SB_FILE=$(ls *.sb 2>/dev/null | head -1)
+          echo "filename=$SB_FILE" >> $GITHUB_OUTPUT
+          echo "Found SB: $SB_FILE"
+      
+      - name: Delete existing latest release
+        if: steps.iso.outputs.filename != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view latest --repo ${{ github.repository }} &>/dev/null; then
+            gh release delete latest --repo ${{ github.repository }} --yes
+          fi
+      
+      - name: Create new latest release
+        if: steps.iso.outputs.filename != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISO_FILE="${{ steps.iso.outputs.filename }}"
+          SB_FILE="${{ steps.sb.outputs.filename }}"
+          
+          gh release create latest \
+            ./*.{iso,sb,txt} \
+            --title "MiniOS Custom (Official Tools)" \
+            --notes "## MiniOS Custom ISO - Built with Official Tools
+          
+          ### Build Information
+          - **Build Number:** #${{ github.run_number }}
+          - **Commit:** ${{ github.sha }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Build Method:** script2sb (Official minios-tools)
+          
+          ### Files
+          - **${ISO_FILE}**: Full bootable ISO image
+          - **${SB_FILE}**: Custom squashfs module (06-custom-amd64.sb)
+          
+          ### Features
+          - ✅ XFCE Desktop Environment
+          - ✅ Chinese input support (IBus + Chewing)
+          - ✅ macOS style keyboard mapping
+          - ✅ Development tools (Docker, QEMU, WireGuard)
+          - ✅ Applications (Git, Vim, Htop, etc.)
+          - ✅ Custom fonts for Chinese display
+          
+          ### Module Hierarchy
+          \`\`\`
+          00-core-amd64.sb
+          01-kernel-amd64.sb
+          02-firmware-amd64.sb
+          03-gui-base-amd64.sb
+          04-xfce-desktop-amd64.sb
+          05-firefox-amd64.sb
+          06-custom-amd64.sb  ← Your custom module
+          \`\`\`
+          
+          ### SHA256 Checksums
+          \`\`\`
+          $(cat checksums.txt 2>/dev/null || echo "Checksums not available")
+          \`\`\`
+          
+          ---
+          *This release is automatically updated on every successful build.*
+          " \
+            --repo ${{ github.repository }}
