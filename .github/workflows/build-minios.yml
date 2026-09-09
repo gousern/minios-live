@@ -30,8 +30,8 @@ jobs:
 
       - name: Install minios-tools from official APT repo
         run: |
-          # Download and add MiniOS GPG key
-          sudo curl -fsSL http://deb.minios.dev/debian/minios-linux.asc -o /etc/apt/trusted.gpg.d/minios-linux.gpg
+          # Download and add MiniOS GPG key from GitHub
+          sudo curl -fsSL https://raw.githubusercontent.com/minios-linux/deb/main/minios-linux.asc -o /etc/apt/trusted.gpg.d/minios-linux.gpg
 
           # Add the repository
           sudo bash -c 'echo "deb http://deb.minios.dev/debian bookworm main contrib non-free" > /etc/apt/sources.list.d/minios-linux.list'
