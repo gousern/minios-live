@@ -1,4 +1,4 @@
-name: Build MiniOS ISO with Custom Packages
+name: Build MiniOS Custom ISO
 
 on:
   workflow_dispatch:
@@ -24,158 +24,146 @@ jobs:
             grub-pc-bin grub-efi-amd64-bin dosfstools mtools xz-utils zstd \
             rsync gettext curl wget gpg
 
-      - name: Create custom package list
+      - name: Setup custom packages and configurations
         run: |
-          mkdir -p ./minios-live/config/package-lists
-          cat > ./minios-live/config/package-lists/custom.list.chroot << 'EOF'
-          # Base development tools
+          cd minios-live
+          
+          # Create necessary directories
+          mkdir -p config/{package-lists,chroot-sources,hooks/normal,includes.chroot}
+          
+          # 1. Package list
+          cat > config/package-lists/custom.list.chroot << 'EOF'
+          # Base tools
+          git curl wget ca-certificates
+          # Development tools
           build-essential dkms linux-headers-amd64
-          git
-          # Networking tools
+          # Network tools
           wireguard-tools openresolv
-          # QEMU and UEFI firmware
-          qemu-system-x86 qemu-utils qemu-kvm
-          ovmf
-          # X11 tools
-          x11-xserver-utils x11-utils
-          # Other utilities
-          vim htop curl wget
+          # QEMU virtualization
+          qemu-system-x86 qemu-utils qemu-kvm ovmf
+          # Desktop utilities
+          x11-xserver-utils x11-utils vim htop
           # Chinese fonts
-          fonts-noto-cjk
-          fonts-noto-color-emoji
-          fonts-wqy-zenhei
-          fonts-wqy-microhei
-          fonts-liberation
-          fonts-dejavu
+          fonts-noto-cjk fonts-noto-color-emoji
+          fonts-wqy-zenhei fonts-wqy-microhei
+          fonts-liberation fonts-dejavu
           # Input method
           ibus ibus-chewing
-          # Desktop fun
+          # Fun desktop toy
           oneko
           EOF
-
-      - name: Add Cloudflare Warp repository
-        run: |
-          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-archive-keyring.gpg > /dev/null
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/ trixie main" | sudo tee /etc/apt/sources.list.d/cloudflare.list
           
-          sudo mkdir -p ./minios-live/config/chroot-sources/
-          sudo cp /usr/share/keyrings/cloudflare-archive-keyring.gpg ./minios-live/config/chroot-sources/
-          sudo cp /etc/apt/sources.list.d/cloudflare.list ./minios-live/config/chroot-sources/
-
-      - name: Create custom installation script
-        run: |
-          mkdir -p ./minios-live/config/hooks/normal/
+          # 2. Cloudflare GPG key
+          curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
+            -o config/chroot-sources/cloudflare-archive-keyring.gpg
           
-          cat > ./minios-live/config/hooks/normal/01-install-custom-packages.chroot << 'EOF'
+          # 3. Cloudflare repository
+          cat > config/chroot-sources/cloudflare.list << 'EOF'
+          deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/ trixie main
+          EOF
+          
+          # 4. Main setup hook (all-in-one script)
+          cat > config/hooks/normal/01-custom-setup.chroot << 'EOF'
           #!/bin/bash
           set -e
           
-          echo "=== Updating package repositories ==="
-          apt-get update
+          echo "=== Custom Setup Started ==="
           
-          echo "=== Installing base packages ==="
-          apt-get install -y git build-essential vim htop curl wget
+          # APT third-party sources
+          if [ -f /etc/apt/cloudflare-archive-keyring.gpg ]; then
+              mkdir -p /usr/share/keyrings/
+              cp /etc/apt/cloudflare-archive-keyring.gpg /usr/share/keyrings/
+          fi
+          if [ -f /etc/apt/cloudflare.list ]; then
+              cp /etc/apt/cloudflare.list /etc/apt/sources.list.d/
+          fi
+          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
+              apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/cloudflare.list" \
+                              -o Dir::Etc::sourceparts="/dev/null" || true
+          fi
           
-          echo "=== Installing DKMS and kernel headers ==="
-          apt-get install -y dkms linux-headers-amd64
+          # DKMS modules (apfs-dkms, broadcom-sta)
+          if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
+              apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
+              dkms autoinstall || echo "WARNING: DKMS build failed"
+          fi
           
-          echo "=== Installing Cloudflare Warp ==="
-          apt-get install -y cloudflare-warp || echo "WARNING: Cloudflare Warp installation failed"
+          # Cloudflare Warp
+          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
+              apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
+          fi
           
-          echo "=== Installing DKMS modules (broadcom-sta, apfs) ==="
-          apt-get install -y broadcom-sta-dkms apfs-dkms || echo "WARNING: DKMS packages marked for installation"
+          # Mise (for live user only)
+          if command -v curl &> /dev/null; then
+              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          fi
           
-          echo "=== Installing QEMU and OVMF ==="
-          apt-get install -y qemu-system-x86 qemu-utils qemu-kvm ovmf
-          
-          echo "=== Installing Mise ==="
-          curl https://mise.run | sh || echo "WARNING: Mise installation failed"
-          
-          echo "=== Installing Chinese fonts ==="
-          apt-get install -y fonts-noto-cjk fonts-noto-color-emoji
-          apt-get install -y fonts-wqy-zenhei fonts-wqy-microhei
-          apt-get install -y fonts-liberation fonts-dejavu
-          
-          echo "=== Installing Chinese input method ==="
-          apt-get install -y ibus ibus-chewing
-          
-          echo "=== Installing oneko ==="
-          apt-get install -y oneko
-          
-          echo "=== Setting timezone to Asia/Taipei ==="
-          echo "Asia/Taipei" > /etc/timezone
-          dpkg-reconfigure -f noninteractive tzdata
-          
-          echo "=== Keeping system locale as English (en_US.UTF-8) ==="
+          # Locale
           echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
           echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
           locale-gen
           update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
           
-          echo "=== Setting default locale for users ==="
-          cat >> /etc/default/locale << 'LOCEOF'
-          LANG=en_US.UTF-8
-          LANGUAGE=en_US:en
-          LC_ALL=en_US.UTF-8
-          LOCEOF
+          # Timezone
+          echo "Asia/Taipei" > /etc/timezone
+          dpkg-reconfigure -f noninteractive tzdata
+          ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime 2>/dev/null || true
           
-          echo "=== Cleaning package cache to reduce ISO size ==="
-          apt-get clean
-          rm -rf /var/lib/apt/lists/*
-          rm -rf /var/cache/apt/*.bin
+          # Configure live user environment (PATH + Mise + IBus + TZ)
+          cat >> /home/live/.bashrc << 'BASHRC'
           
-          echo "=== Verifying installations ==="
-          git --version || echo "WARNING: Git not installed"
-          qemu-system-x86_64 --version || echo "WARNING: QEMU not installed"
-          dpkg -l | grep linux-headers || echo "WARNING: No kernel headers found"
-          date || echo "WARNING: Date check failed"
-          locale -a | grep zh_TW || echo "WARNING: zh_TW.UTF-8 locale not found"
-          fc-list | grep -i noto || echo "WARNING: Noto fonts not found"
+          # Custom PATH
+          export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
           
-          echo "=== Disk usage after cleanup ==="
-          df -h /
-          du -sh /var/cache/apt /var/lib/apt/lists 2>/dev/null || echo "Cache directories cleaned"
+          # Timezone
+          export TZ="Asia/Taipei"
           
-          echo "Package installation completed successfully"
+          # IBus
+          export GTK_IM_MODULE=ibus
+          export QT_IM_MODULE=ibus
+          export XMODIFIERS=@im=ibus
+          
+          # Mise
+          if [ -f "$HOME/.local/bin/mise" ]; then
+              eval "$(mise activate bash)"
+          fi
+          BASHRC
+          
+          mkdir -p /home/live/bin
+          chown live:live /home/live/bin
+          
+          # IBus system settings
+          cat > /etc/default/ibus << 'EOF'
+          IBUS_ENABLE_CTRL_ALT_GR=1
           EOF
-          chmod +x ./minios-live/config/hooks/normal/01-install-custom-packages.chroot
-
-      - name: Create macOS style keyboard configuration
-        run: |
-          # 1. macOS style Xmodmap
-          mkdir -p ./minios-live/config/includes.chroot/etc/X11/xmodmap/
-          cat > ./minios-live/config/includes.chroot/etc/X11/xmodmap/macos.xmodmap << 'EOF'
-          ! macOS style keyboard mapping
-          clear control
-          clear mod1
-          clear mod4
-          clear lock
           
-          ! Alt -> Cmd (Super), Win -> Alt (Option)
-          keycode 64  = Alt_L Meta_L
-          keycode 133 = Super_L
-          keycode 134 = Super_R
-          keycode 108 = Alt_R Meta_R
-          
-          ! CapsLock -> Control
-          keycode 66  = Control_L
-          
-          ! Navigation keys
-          keycode 110 = Home
-          keycode 115 = End
-          keycode 112 = Prior
-          keycode 117 = Next
-          
-          ! Reassign modifier keys
-          add control = Control_L Control_R
-          add mod1    = Alt_L Meta_L Alt_R Meta_R
-          add mod4    = Super_L Super_R
-          add lock    = Caps_Lock
+          # Fontconfig (Chinese fonts preference)
+          cat > /etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+              <alias>
+                  <family>sans-serif</family>
+                  <prefer>
+                      <family>Noto Sans CJK TC</family>
+                      <family>WenQuanYi Zen Hei</family>
+                      <family>Noto Sans</family>
+                  </prefer>
+              </alias>
+              <alias>
+                  <family>serif</family>
+                  <prefer>
+                      <family>Noto Serif CJK TC</family>
+                      <family>WenQuanYi Zen Hei</family>
+                      <family>Noto Serif</family>
+                  </prefer>
+              </alias>
+          </fontconfig>
           EOF
-
-          # 2. XKB keyboard layout with Chinese support
-          mkdir -p ./minios-live/config/includes.chroot/etc/X11/xorg.conf.d/
-          cat > ./minios-live/config/includes.chroot/etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
+          
+          # macOS keyboard mapping (system-wide)
+          mkdir -p /etc/X11/xorg.conf.d/
+          cat > /etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
           Section "InputClass"
               Identifier "keyboard"
               MatchIsKeyboard "on"
@@ -184,193 +172,85 @@ jobs:
               Option "XkbOptions" "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
           EndSection
           EOF
-
-          # 3. IBus configuration for Chinese input
-          mkdir -p ./minios-live/config/includes.chroot/etc/default/
-          cat > ./minios-live/config/includes.chroot/etc/default/ibus << 'EOF'
-          IBUS_ENABLE_CTRL_ALT_GR=1
-          GTK_IM_MODULE=ibus
-          QT_IM_MODULE=ibus
-          XMODIFIERS=@im=ibus
+          
+          mkdir -p /etc/X11/xmodmap/
+          cat > /etc/X11/xmodmap/macos.xmodmap << 'EOF'
+          ! macOS style keyboard mapping
+          clear control
+          clear mod1
+          clear mod4
+          clear lock
+          keycode 64  = Alt_L Meta_L
+          keycode 133 = Super_L
+          keycode 134 = Super_R
+          keycode 108 = Alt_R Meta_R
+          keycode 66  = Control_L
+          keycode 110 = Home
+          keycode 115 = End
+          keycode 112 = Prior
+          keycode 117 = Next
+          add control = Control_L Control_R
+          add mod1    = Alt_L Meta_L Alt_R Meta_R
+          add mod4    = Super_L Super_R
+          add lock    = Caps_Lock
           EOF
-
-          # 4. GTK shortcuts (macOS style)
-          mkdir -p ./minios-live/config/includes.chroot/etc/gtk-3.0/
-          cat > ./minios-live/config/includes.chroot/etc/gtk-3.0/accels.scm << 'EOF'
-          ; GTK macOS style shortcuts (Cmd -> Super)
+          
+          # GTK shortcuts (macOS style)
+          mkdir -p /etc/gtk-3.0/
+          cat > /etc/gtk-3.0/accels.scm << 'EOF'
           (gtk_accel_path "<Actions>/GeditWindow/New" "<Super>n")
           (gtk_accel_path "<Actions>/GeditWindow/Open" "<Super>o")
           (gtk_accel_path "<Actions>/GeditWindow/Save" "<Super>s")
-          (gtk_accel_path "<Actions>/GeditWindow/SaveAs" "<Super><Shift>s")
-          (gtk_accel_path "<Actions>/GeditWindow/Close" "<Super>w")
           (gtk_accel_path "<Actions>/GeditWindow/Quit" "<Super>q")
           (gtk_accel_path "<Actions>/GeditWindow/Undo" "<Super>z")
-          (gtk_accel_path "<Actions>/GeditWindow/Redo" "<Super><Shift>z")
-          (gtk_accel_path "<Actions>/GeditWindow/Cut" "<Super>x")
           (gtk_accel_path "<Actions>/GeditWindow/Copy" "<Super>c")
           (gtk_accel_path "<Actions>/GeditWindow/Paste" "<Super>v")
           (gtk_accel_path "<Actions>/GeditWindow/SelectAll" "<Super>a")
-          (gtk_accel_path "<Actions>/GeditWindow/Find" "<Super>f")
-          (gtk_accel_path "<Actions>/GeditWindow/Replace" "<Super>r")
           EOF
-
-          # 5. Thunar shortcuts
-          mkdir -p ./minios-live/config/includes.chroot/etc/xdg/Thunar/
-          cat > ./minios-live/config/includes.chroot/etc/xdg/Thunar/accels.scm << 'EOF'
-          (gtk_accel_path "<Actions>/ThunarWindow/open-home" "<Super>h")
-          (gtk_accel_path "<Actions>/ThunarWindow/new-window" "<Super>n")
-          (gtk_accel_path "<Actions>/ThunarLauncher/open" "<Super>o")
-          (gtk_accel_path "<Actions>/ThunarLauncher/delete" "<Super>BackSpace")
-          (gtk_accel_path "<Actions>/ThunarWindow/close-window" "<Super>w")
-          (gtk_accel_path "<Actions>/ThunarWindow/quit" "<Super>q")
-          EOF
-
-          # 6. Font configuration for better rendering
-          mkdir -p ./minios-live/config/includes.chroot/etc/fonts/conf.d/
-          cat > ./minios-live/config/includes.chroot/etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
-          <?xml version="1.0"?>
-          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
-          <fontconfig>
-            <alias>
-              <family>sans-serif</family>
-              <prefer>
-                <family>Noto Sans CJK TC</family>
-                <family>WenQuanYi Zen Hei</family>
-                <family>Noto Sans</family>
-              </prefer>
-            </alias>
-            <alias>
-              <family>serif</family>
-              <prefer>
-                <family>Noto Serif CJK TC</family>
-                <family>WenQuanYi Zen Hei</family>
-                <family>Noto Serif</family>
-              </prefer>
-            </alias>
-            <alias>
-              <family>monospace</family>
-              <prefer>
-                <family>Noto Sans Mono CJK TC</family>
-                <family>WenQuanYi Zen Hei Mono</family>
-                <family>Noto Mono</family>
-              </prefer>
-            </alias>
-          </fontconfig>
-          EOF
-
-          # 7. Autostart script (resolution + keyboard)
-          mkdir -p ./minios-live/config/includes.chroot/etc/X11/xsession.d/
-          cat > ./minios-live/config/includes.chroot/etc/X11/xsession.d/99-custom-settings.sh << 'EOF'
-          #!/bin/bash
-          sleep 2
           
-          # Set resolution
-          xrandr -s 1280x800 2>/dev/null || echo "WARNING: Resolution 1280x800 not available"
-          
-          # Load macOS keyboard mapping
-          setxkbmap -layout us,cn -variant mac, -option "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
-          
-          if [ -f /etc/X11/xmodmap/macos.xmodmap ]; then
-              xmodmap /etc/X11/xmodmap/macos.xmodmap
-              echo "macOS keyboard mapping loaded"
-          fi
-          
-          # Start IBus for Chinese input
-          if command -v ibus &> /dev/null; then
-              ibus-daemon -drx &
-              echo "IBus daemon started"
-          fi
-          
-          # Start oneko for fun
-          if command -v oneko &> /dev/null; then
-              oneko &
-              echo "oneko started"
-          fi
-          
-          exit 0
-          EOF
-          chmod +x ./minios-live/config/includes.chroot/etc/X11/xsession.d/99-custom-settings.sh
-
-          # 8. User autostart
-          mkdir -p ./minios-live/config/includes.chroot/home/live/.config/autostart/
-          cat > ./minios-live/config/includes.chroot/home/live/.config/autostart/custom-settings.desktop << 'EOF'
+          # User autostart (live user only)
+          mkdir -p /home/live/.config/autostart/
+          cat > /home/live/.config/autostart/custom-settings.desktop << 'EOF'
           [Desktop Entry]
           Type=Application
           Name=Custom Settings
-          Exec=/etc/X11/xsession.d/99-custom-settings.sh
+          Exec=/bin/bash -c "sleep 2 && ~/.config/autostart/custom-settings.sh"
           Hidden=false
           NoDisplay=false
           X-GNOME-Autostart-enabled=true
           EOF
-
-      - name: Configure mise in .bashrc
-        run: |
-          # Configure for root user
-          mkdir -p ./minios-live/config/includes.chroot/root/
-          cat >> ./minios-live/config/includes.chroot/root/.bashrc << 'EOF'
           
-          # Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$(mise activate bash)"
-          EOF
-          
-          # Configure for live user
-          mkdir -p ./minios-live/config/includes.chroot/home/live/
-          cat >> ./minios-live/config/includes.chroot/home/live/.bashrc << 'EOF'
-          
-          # Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$(mise activate bash)"
-          EOF
-          
-          # Also create .profile as fallback
-          cat >> ./minios-live/config/includes.chroot/root/.profile << 'EOF'
-          
-          # Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$(mise activate bash --shims)"
-          EOF
-          
-          cat >> ./minios-live/config/includes.chroot/home/live/.profile << 'EOF'
-          
-          # Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$(mise activate bash --shims)"
-          EOF
-          
-          # Create global configuration (affects all users)
-          mkdir -p ./minios-live/config/includes.chroot/etc/profile.d/
-          cat > ./minios-live/config/includes.chroot/etc/profile.d/mise.sh << 'EOF'
+          cat > /home/live/.config/autostart/custom-settings.sh << 'EOF'
           #!/bin/bash
-          # Global Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          
-          if command -v mise &> /dev/null; then
-              eval "$(mise activate bash)"
+          xrandr -s 1280x800 2>/dev/null || true
+          setxkbmap -layout us,cn -variant mac, -option "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
+          if [ -f /etc/X11/xmodmap/macos.xmodmap ]; then
+              xmodmap /etc/X11/xmodmap/macos.xmodmap
           fi
+          if command -v ibus-daemon &> /dev/null; then
+              ibus-daemon -drx &
+          fi
+          if command -v oneko &> /dev/null; then
+              oneko &
+          fi
+          exit 0
           EOF
-          chmod +x ./minios-live/config/includes.chroot/etc/profile.d/mise.sh
+          chmod +x /home/live/.config/autostart/custom-settings.sh
+          chown -R live:live /home/live/.config
           
-          # Configure for zsh if exists
-          mkdir -p ./minios-live/config/includes.chroot/etc/skel/
-          cat >> ./minios-live/config/includes.chroot/etc/skel/.bashrc << 'EOF'
+          # Cleanup
+          apt-get clean
+          rm -rf /var/lib/apt/lists/*
+          rm -rf /var/cache/apt/*.bin
           
-          # Mise configuration
-          export PATH="$HOME/.local/bin:$PATH"
-          eval "$(mise activate bash)"
+          echo "=== Custom Setup Completed ==="
           EOF
-
-      - name: Set timezone for ISO
-        run: |
-          mkdir -p ./minios-live/config/includes.chroot/etc/
-          echo "Asia/Taipei" > ./minios-live/config/includes.chroot/etc/timezone
-          sudo timedatectl set-timezone Asia/Taipei 2>/dev/null || echo "Timezone set in chroot only"
+          
+          chmod +x config/hooks/normal/01-custom-setup.chroot
 
       - name: Build MiniOS ISO
         working-directory: ./minios-live
         run: |
-          # -tz Asia/Taipei: Set timezone
-          # -c zstd: Use ZSTD compression
           sudo ./minios-cmd -d trixie -a amd64 -de xfce -pv standard -dkms -kl -c zstd -tz Asia/Taipei
 
       - name: Collect ISO files
