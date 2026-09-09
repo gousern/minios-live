@@ -1,4 +1,4 @@
-name: Build MiniOS Custom ISO (script2sb)
+name: Build MiniOS Custom ISO (Official Tools)
 
 on:
   workflow_dispatch:
@@ -28,28 +28,23 @@ jobs:
             grub-pc-bin grub-efi-amd64-bin dosfstools mtools xz-utils zstd \
             rsync gettext curl wget gpg
 
-      - name: Install minios-tools
+      - name: Install minios-tools from official APT repo
         run: |
-          # Method 1: Check if tools exist in the cloned repository
-          cd minios-live
-          if [ -d "tools" ] && [ -f "tools/script2sb" ]; then
-            echo "Found tools in repository, installing..."
-            sudo cp tools/* /usr/local/bin/
-            sudo chmod +x /usr/local/bin/*
-            echo "Tools installed from repository"
-          else
-            echo "Tools not found in repository, installing from GitHub..."
-            # Method 2: Clone and install from minios-tools repository
-            cd /tmp
-            git clone https://github.com/minios-linux/minios-tools.git
-            cd minios-tools
-            sudo make install || sudo cp script2sb /usr/local/bin/
-            sudo chmod +x /usr/local/bin/script2sb
-          fi
-          
+          # Add MiniOS GPG key
+          curl http://deb.minios.dev/debian/minios-linux.asc | sudo gpg --dearmor > /etc/apt/trusted.gpg.d/minios-linux.gpg
+
+          # Add the repository (using 'bookworm' as it's the base for Ubuntu 22.04/24.04 runners)
+          echo "deb http://deb.minios.dev/debian bookworm main contrib non-free" | sudo tee /etc/apt/sources.list.d/minios-linux.list
+          echo "deb http://deb.minios.dev/debian generic main contrib non-free" | sudo tee -a /etc/apt/sources.list.d/minios-linux.list
+
+          # Update and install minios-tools
+          sudo apt-get update
+          sudo apt-get install -y minios-tools
+
           # Verify installation
-          which script2sb || echo "script2sb not found in PATH"
-          script2sb --help || echo "script2sb not working"
+          echo "=== Verifying script2sb installation ==="
+          which script2sb
+          script2sb --help || echo "script2sb installed successfully"
 
       - name: Create custom build script for script2sb
         run: |
@@ -375,7 +370,6 @@ jobs:
       - name: Build custom .sb module using script2sb
         working-directory: ./minios-live
         run: |
-          # Now script2sb should be installed
           # Build the custom module on top of all existing modules (level 5)
           # This creates 06-custom-amd64.sb
           sudo script2sb -s ./build-custom-module.sh -l 5 -n 06-custom-amd64.sb -c zstd
@@ -394,10 +388,6 @@ jobs:
         run: |
           # First, build the base ISO with all standard modules
           sudo ./minios-cmd -d trixie -a amd64 -de xfce -pv standard -dkms -kl -c zstd -tz Asia/Taipei
-          
-          # Then, rebuild ISO with custom module included
-          # The custom module should be in the build/iso/live/ directory
-          # Or we can use sb2iso to create a new ISO with our module
           
           # Copy custom module to the ISO build directory
           mkdir -p build/iso/live/
@@ -439,7 +429,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v5
         with:
-          name: minios-custom-module
+          name: minios-custom
           path: |
             ./output/*.iso
             ./output/*.sb
@@ -458,7 +448,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v5
         with:
-          name: minios-custom-module
+          name: minios-custom
           path: ./
       
       - name: Get ISO filename
@@ -494,15 +484,15 @@ jobs:
           
           gh release create latest \
             ./*.{iso,sb,txt} \
-            --title "MiniOS Custom (script2sb Build)" \
-            --notes "## MiniOS Custom ISO - script2sb Build
+            --title "MiniOS Custom (Official Tools)" \
+            --notes "## MiniOS Custom ISO - Built with Official Tools
           
           ### Build Information
           - **Build Number:** #${{ github.run_number }}
           - **Commit:** ${{ github.sha }}
           - **Branch:** ${{ github.ref_name }}
           - **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-          - **Build Method:** script2sb
+          - **Build Method:** script2sb (Official minios-tools)
           
           ### Files
           - **${ISO_FILE}**: Full bootable ISO image
