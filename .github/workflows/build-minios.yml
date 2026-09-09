@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
+    tags:
+      - 'v*'
 
 jobs:
   build:
@@ -265,4 +267,56 @@ jobs:
         with:
           name: minios-custom.iso
           path: ./output/*.iso
-          retention-days: 30
+          retention-days: 7
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Download ISO artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: minios-custom.iso
+          path: ./
+      
+      - name: Get ISO filename
+        id: iso
+        run: |
+          ISO_FILE=$(ls *.iso 2>/dev/null | head -1)
+          echo "filename=$ISO_FILE" >> $GITHUB_OUTPUT
+          echo "Found ISO: $ISO_FILE"
+      
+      - name: Create Release and Upload ISO
+        if: steps.iso.outputs.filename != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          ISO_FILE="${{ steps.iso.outputs.filename }}"
+          
+          echo "Creating release for tag: $TAG_NAME"
+          echo "Uploading: $ISO_FILE"
+          
+          gh release create "$TAG_NAME" "$ISO_FILE" \
+            --title "MiniOS Custom $TAG_NAME" \
+            --notes "## MiniOS Custom ISO
+          
+          ### Included Features:
+          - Development tools (build-essential, dkms, linux-headers)
+          - Network tools (wireguard-tools, cloudflare-warp)
+          - QEMU virtualization (qemu-system-x86, ovmf)
+          - Chinese fonts and input method (ibus-chewing)
+          - macOS style keyboard mapping
+          - Mise version manager (for live user only)
+          
+          ### Download
+          Click on the asset below to download the ISO file.
+          
+          ### SHA256 Checksum
+          \`\`\`
+          $(sha256sum "$ISO_FILE")
+          \`\`\`
+          " \
+            --repo ${{ github.repository }} || echo "Release may already exist"
