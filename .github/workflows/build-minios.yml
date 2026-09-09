@@ -113,14 +113,15 @@ jobs:
           mkdir -p /home/live/bin
           chown live:live /home/live/bin
           
-          # IBus
+          # IBus - ensure directory exists
           mkdir -p /etc/default/
           cat > /etc/default/ibus << 'EOF'
           IBUS_ENABLE_CTRL_ALT_GR=1
           EOF
           
-          # Fontconfig
+          # Fontconfig - ensure directory exists with proper permissions
           mkdir -p /etc/fonts/conf.d/
+          chmod 755 /etc/fonts/conf.d/
           cat > /etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
           <?xml version="1.0"?>
           <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
@@ -144,8 +145,9 @@ jobs:
           </fontconfig>
           EOF
           
-          # Keyboard
+          # Keyboard - ensure directories exist
           mkdir -p /etc/X11/xorg.conf.d/
+          chmod 755 /etc/X11/xorg.conf.d/
           cat > /etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
           Section "InputClass"
               Identifier "keyboard"
@@ -157,6 +159,7 @@ jobs:
           EOF
           
           mkdir -p /etc/X11/xmodmap/
+          chmod 755 /etc/X11/xmodmap/
           cat > /etc/X11/xmodmap/macos.xmodmap << 'EOF'
           ! macOS style keyboard mapping
           clear control
@@ -180,6 +183,7 @@ jobs:
           
           # GTK shortcuts
           mkdir -p /etc/gtk-3.0/
+          chmod 755 /etc/gtk-3.0/
           cat > /etc/gtk-3.0/accels.scm << 'EOF'
           (gtk_accel_path "<Actions>/GeditWindow/New" "<Super>n")
           (gtk_accel_path "<Actions>/GeditWindow/Open" "<Super>o")
@@ -193,6 +197,7 @@ jobs:
           
           # User autostart
           mkdir -p /home/live/.config/autostart/
+          chmod 755 /home/live/.config/autostart/
           cat > /home/live/.config/autostart/custom-settings.desktop << 'EOF'
           [Desktop Entry]
           Type=Application
