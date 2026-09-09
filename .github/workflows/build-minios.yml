@@ -26,16 +26,20 @@ jobs:
           sudo apt-get install -y \
             debootstrap xorriso genisoimage binutils squashfs-tools \
             grub-pc-bin grub-efi-amd64-bin dosfstools mtools xz-utils zstd \
-            rsync gettext curl wget gpg
+            rsync gettext curl wget gpg lsb-release
 
       - name: Install minios-tools from official APT repo
         run: |
-          # Download and add MiniOS GPG key from the master branch
-          sudo curl -fsSL https://github.com/minios-linux/deb/raw/refs/heads/master/minios-linux.asc -o /etc/apt/trusted.gpg.d/minios-linux.gpg
+          # Add MiniOS GPG key (using GitHub raw URL since deb.minios.dev returns 404)
+          curl -fsSL https://github.com/minios-linux/deb/raw/refs/heads/master/minios-linux.asc | sudo gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/minios-linux.gpg > /dev/null
 
-          # Add the repository
-          sudo bash -c 'echo "deb http://deb.minios.dev/debian bookworm main contrib non-free" > /etc/apt/sources.list.d/minios-linux.list'
-          sudo bash -c 'echo "deb http://deb.minios.dev/debian generic main contrib non-free" >> /etc/apt/sources.list.d/minios-linux.list'
+          # Determine the distribution
+          distro=$(lsb_release -cs)
+          echo "Detected distribution: $distro"
+
+          # Add the source depending on the distribution
+          echo "deb http://deb.minios.dev/debian $distro main contrib non-free" | sudo tee /etc/apt/sources.list.d/minios-linux.list
+          echo "deb http://deb.minios.dev/debian generic main contrib non-free" | sudo tee -a /etc/apt/sources.list.d/minios-linux.list
 
           # Update and install minios-tools
           sudo apt-get update
