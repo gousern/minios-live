@@ -28,8 +28,10 @@ jobs:
         run: |
           cd minios-live
           
-          mkdir -p config/{package-lists,chroot-sources,hooks/normal,includes.chroot}
-          
+          # ============================================
+          # 1. Package lists (套件清單)
+          # ============================================
+          mkdir -p config/package-lists/
           cat > config/package-lists/custom.list.chroot << 'EOF'
           git curl wget ca-certificates
           build-essential dkms linux-headers-amd64
@@ -43,6 +45,10 @@ jobs:
           oneko
           EOF
           
+          # ============================================
+          # 2. Cloudflare GPG key and repository
+          # ============================================
+          mkdir -p config/chroot-sources/
           curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
             -o config/chroot-sources/cloudflare-archive-keyring.gpg
           
@@ -50,79 +56,14 @@ jobs:
           deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/ trixie main
           EOF
           
-          cat > config/hooks/normal/01-custom-setup.chroot << 'EOF'
-          #!/bin/bash
-          set -e
+          # ============================================
+          # 3. Configuration files (includes.chroot)
+          #    These will be copied by minios-cmd at build time
+          # ============================================
           
-          echo "=== Custom Setup Started ==="
-          
-          # APT third-party sources
-          if [ -f /etc/apt/cloudflare-archive-keyring.gpg ]; then
-              mkdir -p /usr/share/keyrings/
-              cp /etc/apt/cloudflare-archive-keyring.gpg /usr/share/keyrings/
-          fi
-          if [ -f /etc/apt/cloudflare.list ]; then
-              cp /etc/apt/cloudflare.list /etc/apt/sources.list.d/
-          fi
-          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
-              apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/cloudflare.list" \
-                              -o Dir::Etc::sourceparts="/dev/null" || true
-          fi
-          
-          # DKMS modules
-          if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
-              apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
-              dkms autoinstall || echo "WARNING: DKMS build failed"
-          fi
-          
-          # Cloudflare Warp
-          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
-              apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
-          fi
-          
-          # Mise (live user only)
-          if command -v curl &> /dev/null; then
-              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
-          fi
-          
-          # Locale
-          echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
-          echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
-          locale-gen
-          update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
-          
-          # Timezone
-          echo "Asia/Taipei" > /etc/timezone
-          dpkg-reconfigure -f noninteractive tzdata
-          ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime 2>/dev/null || true
-          
-          # Live user environment
-          cat >> /home/live/.bashrc << 'BASHRC'
-          
-          export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
-          export TZ="Asia/Taipei"
-          export GTK_IM_MODULE=ibus
-          export QT_IM_MODULE=ibus
-          export XMODIFIERS=@im=ibus
-          
-          if [ -f "$HOME/.local/bin/mise" ]; then
-              eval "$(mise activate bash)"
-          fi
-          BASHRC
-          
-          mkdir -p /home/live/bin
-          chown live:live /home/live/bin
-          
-          # IBus - ensure directory exists
-          mkdir -p /etc/default/
-          cat > /etc/default/ibus << 'EOF'
-          IBUS_ENABLE_CTRL_ALT_GR=1
-          EOF
-          
-          # Fontconfig - ensure directory exists with proper permissions
-          mkdir -p /etc/fonts/conf.d/
-          chmod 755 /etc/fonts/conf.d/
-          cat > /etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
+          # 3a. Fontconfig - Chinese fonts preference
+          mkdir -p config/includes.chroot/etc/fonts/conf.d/
+          cat > config/includes.chroot/etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
           <?xml version="1.0"?>
           <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
           <fontconfig>
@@ -142,13 +83,26 @@ jobs:
                       <family>Noto Serif</family>
                   </prefer>
               </alias>
+              <alias>
+                  <family>monospace</family>
+                  <prefer>
+                      <family>Noto Sans Mono CJK TC</family>
+                      <family>WenQuanYi Zen Hei Mono</family>
+                      <family>Noto Mono</family>
+                  </prefer>
+              </alias>
           </fontconfig>
           EOF
           
-          # Keyboard - ensure directories exist
-          mkdir -p /etc/X11/xorg.conf.d/
-          chmod 755 /etc/X11/xorg.conf.d/
-          cat > /etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
+          # 3b. IBus default configuration
+          mkdir -p config/includes.chroot/etc/default/
+          cat > config/includes.chroot/etc/default/ibus << 'EOF'
+          IBUS_ENABLE_CTRL_ALT_GR=1
+          EOF
+          
+          # 3c. X11 keyboard - XKB configuration
+          mkdir -p config/includes.chroot/etc/X11/xorg.conf.d/
+          cat > config/includes.chroot/etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
           Section "InputClass"
               Identifier "keyboard"
               MatchIsKeyboard "on"
@@ -158,47 +112,60 @@ jobs:
           EndSection
           EOF
           
-          mkdir -p /etc/X11/xmodmap/
-          chmod 755 /etc/X11/xmodmap/
-          cat > /etc/X11/xmodmap/macos.xmodmap << 'EOF'
+          # 3d. X11 xmodmap - macOS style key mapping
+          mkdir -p config/includes.chroot/etc/X11/xmodmap/
+          cat > config/includes.chroot/etc/X11/xmodmap/macos.xmodmap << 'EOF'
           ! macOS style keyboard mapping
           clear control
           clear mod1
           clear mod4
           clear lock
+          
+          ! Alt -> Cmd (Super), Win -> Alt (Option)
           keycode 64  = Alt_L Meta_L
           keycode 133 = Super_L
           keycode 134 = Super_R
           keycode 108 = Alt_R Meta_R
+          
+          ! CapsLock -> Control
           keycode 66  = Control_L
+          
+          ! Navigation keys
           keycode 110 = Home
           keycode 115 = End
           keycode 112 = Prior
           keycode 117 = Next
+          
+          ! Reassign modifier keys
           add control = Control_L Control_R
           add mod1    = Alt_L Meta_L Alt_R Meta_R
           add mod4    = Super_L Super_R
           add lock    = Caps_Lock
           EOF
           
-          # GTK shortcuts
-          mkdir -p /etc/gtk-3.0/
-          chmod 755 /etc/gtk-3.0/
-          cat > /etc/gtk-3.0/accels.scm << 'EOF'
+          # 3e. GTK shortcuts - macOS style
+          mkdir -p config/includes.chroot/etc/gtk-3.0/
+          cat > config/includes.chroot/etc/gtk-3.0/accels.scm << 'EOF'
+          ; GTK macOS style shortcuts (Cmd -> Super)
           (gtk_accel_path "<Actions>/GeditWindow/New" "<Super>n")
           (gtk_accel_path "<Actions>/GeditWindow/Open" "<Super>o")
           (gtk_accel_path "<Actions>/GeditWindow/Save" "<Super>s")
+          (gtk_accel_path "<Actions>/GeditWindow/SaveAs" "<Super><Shift>s")
+          (gtk_accel_path "<Actions>/GeditWindow/Close" "<Super>w")
           (gtk_accel_path "<Actions>/GeditWindow/Quit" "<Super>q")
           (gtk_accel_path "<Actions>/GeditWindow/Undo" "<Super>z")
+          (gtk_accel_path "<Actions>/GeditWindow/Redo" "<Super><Shift>z")
+          (gtk_accel_path "<Actions>/GeditWindow/Cut" "<Super>x")
           (gtk_accel_path "<Actions>/GeditWindow/Copy" "<Super>c")
           (gtk_accel_path "<Actions>/GeditWindow/Paste" "<Super>v")
           (gtk_accel_path "<Actions>/GeditWindow/SelectAll" "<Super>a")
+          (gtk_accel_path "<Actions>/GeditWindow/Find" "<Super>f")
+          (gtk_accel_path "<Actions>/GeditWindow/Replace" "<Super>r")
           EOF
           
-          # User autostart
-          mkdir -p /home/live/.config/autostart/
-          chmod 755 /home/live/.config/autostart/
-          cat > /home/live/.config/autostart/custom-settings.desktop << 'EOF'
+          # 3f. User autostart - custom settings script
+          mkdir -p config/includes.chroot/home/live/.config/autostart/
+          cat > config/includes.chroot/home/live/.config/autostart/custom-settings.desktop << 'EOF'
           [Desktop Entry]
           Type=Application
           Name=Custom Settings
@@ -208,26 +175,118 @@ jobs:
           X-GNOME-Autostart-enabled=true
           EOF
           
-          cat > /home/live/.config/autostart/custom-settings.sh << 'EOF'
+          cat > config/includes.chroot/home/live/.config/autostart/custom-settings.sh << 'EOF'
           #!/bin/bash
+          
+          # Set resolution
           xrandr -s 1280x800 2>/dev/null || true
+          
+          # Load macOS keyboard mapping
           setxkbmap -layout us,cn -variant mac, -option "ctrl:swapcaps,altwin:swap_alt_win,grp:alt_shift_toggle"
+          
           if [ -f /etc/X11/xmodmap/macos.xmodmap ]; then
               xmodmap /etc/X11/xmodmap/macos.xmodmap
           fi
+          
+          # Start IBus for Chinese input
           if command -v ibus-daemon &> /dev/null; then
               ibus-daemon -drx &
           fi
+          
+          # Start oneko
           if command -v oneko &> /dev/null; then
               oneko &
           fi
+          
           exit 0
           EOF
-          chmod +x /home/live/.config/autostart/custom-settings.sh
-          chown -R live:live /home/live/.config
+          chmod +x config/includes.chroot/home/live/.config/autostart/custom-settings.sh
+          
+          # 3g. Live user .bashrc - PATH and environment
+          cat >> config/includes.chroot/home/live/.bashrc << 'BASHRC'
+          
+          # Custom PATH (include ~/bin)
+          export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
+          
+          # Timezone
+          export TZ="Asia/Taipei"
+          
+          # IBus environment for Chinese input
+          export GTK_IM_MODULE=ibus
+          export QT_IM_MODULE=ibus
+          export XMODIFIERS=@im=ibus
+          
+          # Mise (if installed)
+          if [ -f "$HOME/.local/bin/mise" ]; then
+              eval "$(mise activate bash)"
+          fi
+          BASHRC
+          
+          # 3h. Create ~/bin directory for user
+          mkdir -p config/includes.chroot/home/live/bin/
           
           # ============================================
-          # FULL CLEANUP - Maximum ISO size reduction
+          # 4. Hook script (only for dynamic operations)
+          #    Installing packages, DKMS, Mise, cleanup
+          # ============================================
+          mkdir -p config/hooks/normal/
+          cat > config/hooks/normal/01-custom-setup.chroot << 'EOF'
+          #!/bin/bash
+          set -e
+          
+          echo "=== Custom Setup Hook Started ==="
+          
+          # ============================================
+          # APT third-party sources
+          # ============================================
+          if [ -f /etc/apt/cloudflare-archive-keyring.gpg ]; then
+              mkdir -p /usr/share/keyrings/
+              cp /etc/apt/cloudflare-archive-keyring.gpg /usr/share/keyrings/
+          fi
+          if [ -f /etc/apt/cloudflare.list ]; then
+              cp /etc/apt/cloudflare.list /etc/apt/sources.list.d/
+          fi
+          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
+              apt-get update -o Dir::Etc::sourcelist="/etc/apt/sources.list.d/cloudflare.list" \
+                              -o Dir::Etc::sourceparts="/dev/null" || true
+          fi
+          
+          # ============================================
+          # DKMS modules (needs kernel headers)
+          # ============================================
+          if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
+              apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
+              dkms autoinstall || echo "WARNING: DKMS build failed"
+          fi
+          
+          # ============================================
+          # Cloudflare Warp
+          # ============================================
+          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
+              apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
+          fi
+          
+          # ============================================
+          # Mise (live user only)
+          # ============================================
+          if command -v curl &> /dev/null; then
+              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          fi
+          
+          # ============================================
+          # Locale and Timezone
+          # ============================================
+          echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
+          echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
+          locale-gen
+          update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
+          
+          echo "Asia/Taipei" > /etc/timezone
+          dpkg-reconfigure -f noninteractive tzdata
+          ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime 2>/dev/null || true
+          
+          # ============================================
+          # FULL CLEANUP - Reduce ISO size
           # ============================================
           echo "=== Full cleanup started ==="
           
@@ -267,30 +326,28 @@ jobs:
           # Remove bash history
           rm -f /root/.bash_history /home/live/.bash_history 2>/dev/null || true
           
-          # ============================================
-          # EXTRA CLEANUP - More aggressive size reduction
-          # ============================================
+          # Extra cleanup
           echo "=== Extra cleanup started ==="
           
-          # Remove unnecessary kernel modules (staging, media drivers)
+          # Remove unnecessary kernel modules
           rm -rf /lib/modules/*/kernel/drivers/staging 2>/dev/null || true
           rm -rf /lib/modules/*/kernel/drivers/media 2>/dev/null || true
           
-          # Remove extra kernel headers (keep only current)
+          # Remove extra kernel headers
           rm -rf /usr/src/linux-headers-* 2>/dev/null || true
           
           # Remove unnecessary X11 drivers
           rm -rf /usr/lib/xorg/modules/drivers/*_drv.so 2>/dev/null || true
           
-          # Remove unnecessary fonts (keep only CJK and basic)
+          # Remove unnecessary fonts
           find /usr/share/fonts -type f \( -name "*.pcf" -o -name "*.pcf.gz" \) -delete 2>/dev/null || true
           
-          # Remove unnecessary icons (keep only hicolor and default)
+          # Remove unnecessary icons
           find /usr/share/icons -mindepth 1 -maxdepth 1 -type d \
             ! -name "hicolor" ! -name "default" ! -name "Adwaita" \
             -exec rm -rf {} \; 2>/dev/null || true
           
-          # Remove unnecessary themes (keep only default)
+          # Remove unnecessary themes
           find /usr/share/themes -mindepth 1 -maxdepth 1 -type d \
             ! -name "Default" ! -name "Adwaita" \
             -exec rm -rf {} \; 2>/dev/null || true
@@ -309,7 +366,7 @@ jobs:
           df -h /
           du -sh /usr/share 2>/dev/null || echo "usr/share cleaned"
           
-          echo "=== Custom Setup Completed ==="
+          echo "=== Custom Setup Hook Completed ==="
           EOF
           
           chmod +x config/hooks/normal/01-custom-setup.chroot
