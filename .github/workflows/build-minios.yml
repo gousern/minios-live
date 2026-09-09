@@ -4,8 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, master ]
-    tags:
-      - 'v*'
 
 jobs:
   build:
@@ -30,48 +28,34 @@ jobs:
         run: |
           cd minios-live
           
-          # Create necessary directories
           mkdir -p config/{package-lists,chroot-sources,hooks/normal,includes.chroot}
           
-          # 1. Package list
           cat > config/package-lists/custom.list.chroot << 'EOF'
-          # Base tools
           git curl wget ca-certificates
-          # Development tools
           build-essential dkms linux-headers-amd64
-          # Network tools
           wireguard-tools openresolv
-          # QEMU virtualization
           qemu-system-x86 qemu-utils qemu-kvm ovmf
-          # Desktop utilities
           x11-xserver-utils x11-utils vim htop
-          # Chinese fonts
           fonts-noto-cjk fonts-noto-color-emoji
           fonts-wqy-zenhei fonts-wqy-microhei
           fonts-liberation fonts-dejavu
-          # Input method
           ibus ibus-chewing
-          # Fun desktop toy
           oneko
           EOF
           
-          # 2. Cloudflare GPG key
           curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg \
             -o config/chroot-sources/cloudflare-archive-keyring.gpg
           
-          # 3. Cloudflare repository
           cat > config/chroot-sources/cloudflare.list << 'EOF'
           deb [signed-by=/usr/share/keyrings/cloudflare-archive-keyring.gpg] https://pkg.cloudflare.com/ trixie main
           EOF
           
-          # 4. Main setup hook (all-in-one script)
           cat > config/hooks/normal/01-custom-setup.chroot << 'EOF'
           #!/bin/bash
           set -e
           
           echo "=== Custom Setup Started ==="
           
-          # APT third-party sources
           if [ -f /etc/apt/cloudflare-archive-keyring.gpg ]; then
               mkdir -p /usr/share/keyrings/
               cp /etc/apt/cloudflare-archive-keyring.gpg /usr/share/keyrings/
@@ -84,48 +68,36 @@ jobs:
                               -o Dir::Etc::sourceparts="/dev/null" || true
           fi
           
-          # DKMS modules (apfs-dkms, broadcom-sta)
           if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
               apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
               dkms autoinstall || echo "WARNING: DKMS build failed"
           fi
           
-          # Cloudflare Warp
           if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
               apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
           fi
           
-          # Mise (for live user only)
           if command -v curl &> /dev/null; then
               sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
           fi
           
-          # Locale
           echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
           echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
           locale-gen
           update-locale LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
           
-          # Timezone
           echo "Asia/Taipei" > /etc/timezone
           dpkg-reconfigure -f noninteractive tzdata
           ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime 2>/dev/null || true
           
-          # Configure live user environment (PATH + Mise + IBus + TZ)
           cat >> /home/live/.bashrc << 'BASHRC'
           
-          # Custom PATH
           export PATH="$HOME/bin:$HOME/.local/bin:$PATH"
-          
-          # Timezone
           export TZ="Asia/Taipei"
-          
-          # IBus
           export GTK_IM_MODULE=ibus
           export QT_IM_MODULE=ibus
           export XMODIFIERS=@im=ibus
           
-          # Mise
           if [ -f "$HOME/.local/bin/mise" ]; then
               eval "$(mise activate bash)"
           fi
@@ -134,12 +106,10 @@ jobs:
           mkdir -p /home/live/bin
           chown live:live /home/live/bin
           
-          # IBus system settings
           cat > /etc/default/ibus << 'EOF'
           IBUS_ENABLE_CTRL_ALT_GR=1
           EOF
           
-          # Fontconfig (Chinese fonts preference)
           cat > /etc/fonts/conf.d/99-language-selector-zh.conf << 'EOF'
           <?xml version="1.0"?>
           <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
@@ -163,7 +133,6 @@ jobs:
           </fontconfig>
           EOF
           
-          # macOS keyboard mapping (system-wide)
           mkdir -p /etc/X11/xorg.conf.d/
           cat > /etc/X11/xorg.conf.d/00-keyboard.conf << 'EOF'
           Section "InputClass"
@@ -197,7 +166,6 @@ jobs:
           add lock    = Caps_Lock
           EOF
           
-          # GTK shortcuts (macOS style)
           mkdir -p /etc/gtk-3.0/
           cat > /etc/gtk-3.0/accels.scm << 'EOF'
           (gtk_accel_path "<Actions>/GeditWindow/New" "<Super>n")
@@ -210,7 +178,6 @@ jobs:
           (gtk_accel_path "<Actions>/GeditWindow/SelectAll" "<Super>a")
           EOF
           
-          # User autostart (live user only)
           mkdir -p /home/live/.config/autostart/
           cat > /home/live/.config/autostart/custom-settings.desktop << 'EOF'
           [Desktop Entry]
@@ -240,7 +207,6 @@ jobs:
           chmod +x /home/live/.config/autostart/custom-settings.sh
           chown -R live:live /home/live/.config
           
-          # Cleanup
           apt-get clean
           rm -rf /var/lib/apt/lists/*
           rm -rf /var/cache/apt/*.bin
@@ -272,7 +238,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: success()
     
     steps:
       - name: Download ISO artifact
@@ -288,22 +254,41 @@ jobs:
           echo "filename=$ISO_FILE" >> $GITHUB_OUTPUT
           echo "Found ISO: $ISO_FILE"
       
-      - name: Create Release and Upload ISO
+      - name: Delete existing latest release
         if: steps.iso.outputs.filename != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Checking if latest release exists..."
+          if gh release view latest --repo ${{ github.repository }} &>/dev/null; then
+            echo "Deleting existing latest release..."
+            gh release delete latest --repo ${{ github.repository }} --yes
+          else
+            echo "No existing latest release found."
+          fi
+      
+      - name: Create new latest release
+        if: steps.iso.outputs.filename != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           ISO_FILE="${{ steps.iso.outputs.filename }}"
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
           
-          echo "Creating release for tag: $TAG_NAME"
+          echo "Creating new latest release..."
           echo "Uploading: $ISO_FILE"
           
-          gh release create "$TAG_NAME" "$ISO_FILE" \
-            --title "MiniOS Custom $TAG_NAME" \
-            --notes "## MiniOS Custom ISO
+          gh release create latest "$ISO_FILE" \
+            --title "MiniOS Custom ISO (Latest Build)" \
+            --notes "## MiniOS Custom ISO - Latest Build
           
-          ### Included Features:
+          ### Build Information
+          - **Build Number:** #${{ github.run_number }}
+          - **Commit:** ${{ github.sha }}
+          - **Branch:** ${{ github.ref_name }}
+          - **Build Date:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ### Included Features
           - Development tools (build-essential, dkms, linux-headers)
           - Network tools (wireguard-tools, cloudflare-warp)
           - QEMU virtualization (qemu-system-x86, ovmf)
@@ -318,5 +303,10 @@ jobs:
           \`\`\`
           $(sha256sum "$ISO_FILE")
           \`\`\`
+          
+          ---
+          *This release is automatically updated on every successful build.*
           " \
-            --repo ${{ github.repository }} || echo "Release may already exist"
+            --repo ${{ github.repository }}
+          
+          echo "Release created successfully!"
