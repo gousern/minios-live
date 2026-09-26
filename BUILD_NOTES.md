@@ -215,6 +215,8 @@ linux-live/scripts/07-customs/
 - `xfce4-keyboard-shortcuts.xml` → `/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/` (XFCE shortcuts)
 - `macos_style_keyboard.sh` → `/usr/local/bin/` (keyboard setup script)
 - `screen.sh` → `/usr/local/bin/` (resolution fix script)
+- `im.sh` → `/usr/local/bin/` (Fcitx5 verification and setup)
+- `macos_style_firefox_fonts.sh` → `/usr/local/bin/` (PingFang font for Firefox)
 
 ### How to Add Packages
 1. Edit `linux-live/scripts/07-customs/packages.list`
