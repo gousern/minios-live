@@ -49,6 +49,33 @@ EOF
     fi
 fi
 
+# Add the official Cloudflare WARP repository before CondinAPT resolves the Toolbox package list.
+if ([ "$PACKAGE_VARIANT" = "toolbox" ] || [ "$PACKAGE_VARIANT" = "ultra" ]) && [ "$DISTRIBUTION_ARCH" = "amd64" ]; then
+    install -m 0755 -d /usr/share/keyrings /etc/apt/sources.list.d
+
+    if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+        curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+            | gpg --yes --dearmor \
+            --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+    else
+        run_with_spinner "Downloading Cloudflare WARP GPG key" curl -fsSL \
+            https://pkg.cloudflareclient.com/pubkey.gpg \
+            | gpg --yes --dearmor \
+            --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+    fi
+    chmod 0644 /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+
+    cat >/etc/apt/sources.list.d/cloudflare-client.list <<EOF
+deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${DISTRIBUTION} main
+EOF
+
+    if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+        apt-get update --allow-releaseinfo-change
+    else
+        run_with_spinner "Updating package lists with Cloudflare WARP repository" apt-get update --allow-releaseinfo-change
+    fi
+fi
+
 /condinapt -l "${SCRIPT_DIR}/packages.list" -c "${SCRIPT_DIR}/minios_build.conf" -m "${SCRIPT_DIR}/condinapt.map"
 if [ $? -ne 0 ]; then
     echo "Failed to install packages."
