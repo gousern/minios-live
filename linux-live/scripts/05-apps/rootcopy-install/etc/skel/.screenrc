@@ -1,0 +1,31 @@
+# ~/.screenrc
+
+# ===== 基本 =====
+startup_message off
+defscrollback 10000
+vbell off
+bell_msg ""
+autodetach on
+shelltitle "$ |bash"
+
+# ===== 编码 =====
+defutf8 on
+utf8 on
+
+# ===== 硬状态栏 =====
+hardstatus alwayslastline
+hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B}%Y-%m-%d %{W}%c %{g}]'
+
+# ===== 终端 =====
+termcapinfo xterm* ti@:te@
+termcapinfo xterm* hs:ts=\E]0;:fs=\007:ds=\E]0;\007
+
+# ===== 快捷键 =====
+bindkey -k k1 select 1
+bindkey -k k2 select 2
+bindkey -k k3 select 3
+bindkey -k k4 select 4
+
+# ===== 新窗口默认设置 =====
+defshell -bash
+deflogin off
