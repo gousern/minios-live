@@ -18,7 +18,7 @@ jobs:
       - name: Clone MiniOS repository
         uses: actions/checkout@v5
         with:
-          repository: minios-linux/minios-live
+          repository: gousern/minios-live
           path: minios-live
 
       - name: Install build dependencies
@@ -239,7 +239,7 @@ jobs:
           
           echo "=== Custom Setup Hook Started ==="
           
-          # APT third-party sources
+          # APT third-party sources (Cloudflare)
           if [ -f /etc/apt/cloudflare-archive-keyring.gpg ]; then
               mkdir -p /usr/share/keyrings/
               cp /etc/apt/cloudflare-archive-keyring.gpg /usr/share/keyrings/
@@ -252,20 +252,9 @@ jobs:
                               -o Dir::Etc::sourceparts="/dev/null" || true
           fi
           
-          # DKMS modules
-          if command -v dkms &> /dev/null && dpkg -l | grep -q linux-headers-amd64; then
-              apt-get install -y apfs-dkms broadcom-sta-dkms || echo "WARNING: DKMS modules failed"
-              dkms autoinstall || echo "WARNING: DKMS build failed"
-          fi
-          
-          # Cloudflare Warp
-          if [ -f /etc/apt/sources.list.d/cloudflare.list ]; then
-              apt-get install -y cloudflare-warp || echo "WARNING: Warp installation failed"
-          fi
-          
-          # Mise (live user only)
-          if command -v curl &> /dev/null; then
-              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          # DKMS autoinstall (packages already installed via packages.list)
+          if command -v dkms &> /dev/null; then
+              dkms autoinstall || echo "WARNING: DKMS autoinstall had errors"
           fi
           
           # Locale and Timezone
