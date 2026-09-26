@@ -54,7 +54,10 @@ if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
     echo "Installing mise..."
 fi
 
-curl -fsSL https://mise.run | bash 2>/dev/null || echo "WARNING: mise install failed"
+# System-wide install: the plain installer would land in /root/.local/bin
+# (invisible to the live user), so pin the path to /usr/local/bin.
+curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh \
+    || echo "WARNING: mise install failed"
 
 # ============================================
 # Apply macOS-style keyboard shortcuts
@@ -137,5 +140,22 @@ if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
 fi
 
 fc-cache -fv >/dev/null 2>&1 || true
+
+# ============================================
+# Seed the baked live user home with skel configs
+# ============================================
+# /home/live is baked into the image by 05-apps rootcopy, and Debian's
+# adduser skips the /etc/skel copy when the home dir already exists
+# ("home directory already exists. Not touching this directory").
+# Without this copy the live session gets no xfce4 theme/wallpaper,
+# no panel config and no autostart entries. Must run LAST so all skel
+# edits from earlier modules (04/05/07) are included.
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Seeding /home/live from /etc/skel..."
+fi
+
+if [ -d /home/live ]; then
+    cp -a /etc/skel/. /home/live/
+fi
 
 echo "Custom packages installed successfully."

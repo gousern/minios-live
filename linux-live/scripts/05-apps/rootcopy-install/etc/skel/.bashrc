@@ -176,7 +176,11 @@ check_package_cache() {
 
 # Set prompt command to check package cache
 PROMPT_COMMAND="check_package_cache"
-eval "$(~/.local/bin/mise activate bash)"
+if [ -x "$HOME/.local/bin/mise" ]; then
+    eval "$("$HOME/.local/bin/mise" activate bash)"
+elif command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate bash)"
+fi
 
 # Launch interactive Termux shell via adb
 # Requires GitHub debug-build Termux (not Play Store/F-Droid) [citation:8][citation:15]

@@ -84,7 +84,40 @@
 - Session timeline (UTC): first boot ≈19:30 desktop; `system_reset` ≈19:56; fresh session desktop 20:04,
   alt-f2 worked 20:05, typing dead 20:06, clock later showed 20:03 while UTC 20:12 → clock freeze/hang loop.
 
-## 4. Root-cause hypotheses (ranked, testable)
+## 4. ROOT CAUSE (confirmed 2026-09-27, source-level proof)
+
+### 4a. Theme/wallpaper/resolution missing — skel never reaches the live user
+1. Fork's `05-apps/rootcopy-install/home/live/bin/{im.sh,screen.sh,system-provision.sh,macos_style_firefox_fonts.sh}`
+   **bakes `/home/live/` into the image** (official 5.1.1 ISO has NO `/home/live` — verified).
+2. At boot, `minios-live-config` `components/0030-user-setup` → Debian `user-setup-apply` →
+   **`adduser`**: when home exists → *"The home directory already exists. Not touching this directory"*
+   → **`/etc/skel` copy is SKIPPED** (it only runs in the create-home branch;
+   `/usr/sbin/adduser` `create_homedir`, lines 1070-1112).
+3. No `~/.config/xfce4/*` → xfconf falls back to defaults → black wallpaper + default icons +
+   no MiniOS theme. No `~/.config/autostart/set-resolution.desktop` → resolution fix never runs
+   (second user symptom). No `.xprofile`/fcitx5 profile either.
+4. Skel itself is PERFECT (verified in image): xsettings `Greybird` + `elementary-minios-dark`,
+   `last-image=/usr/share/backgrounds/minios6-toolbox.jpg`, autostart entries present.
+
+### 4b. mise missing in the ISO
+- `07-customs/install` ran `curl https://mise.run | bash` **as root** → binary at
+  `/root/.local/bin/mise` (146 MB, verified in 07 module) → invisible to user `live`.
+- Installer env var to pin path: `MISE_INSTALL_PATH` (from `mise.run` source:
+  `install_path="${MISE_INSTALL_PATH:-$HOME/.local/bin/mise}"`).
+
+### 4c. Fix applied (commit in git log)
+- `07-customs/install`: mise → `MISE_INSTALL_PATH=/usr/local/bin/mise` (system-wide).
+- `07-customs/install` END (must stay last module): `cp -a /etc/skel/. /home/live/` —
+  seeds baked home; boot's `0030-user-setup` does `chown -R live:live` afterwards.
+- `05-apps/.../etc/skel/.bashrc`: guarded mise activate (works from `~/.local/bin` or PATH,
+  silent when absent).
+- Validated: `shellcheck -S warning` rc=0, `bash -n` OK. shfmt diffs are PRE-EXISTING
+  (HEAD also fails: 113 lines, file uses 4-space not 2-space indent — not reformatted per
+  "only touch what must be touched").
+- End-to-end proof needs a new ISO build + boot test (tag → workflow_dispatch on
+  `trixie-xfce-toolbox-amd64.yml`; ask user before tagging releases).
+
+## 4-old. Hypotheses (superseded, kept for reference)
 
 1. **skel `xfce4-desktop.xml` never reaches/loads into the live user** (→ defaults: black + all icons).
    Test: shell in guest → `cat /home/live/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml`,
