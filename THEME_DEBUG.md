@@ -74,8 +74,11 @@
 ### Other environment notes
 - `gh` works (auth'd; default repo = upstream `minios-linux/minios-live`).
 - Official ISO (ground truth): `/home/live/Downloads/minios-trixie-xfce-toolbox-amd64-5.1.1.iso`
-  — COMPLETE, 1241952256 bytes (matches release asset size). Verify against release
-  `.sha256` asset (`gh release download v5.1.1 -R minios-linux/minios-live -p "...iso.sha256"`).
+  — COMPLETE + **sha256 VERIFIED** vs release asset:
+  `ca4f7d25c7d60b83e1fdac45c496a5e94e9ac8bbb87396123f7a1c85e7b29979`.
+  Release also has `.sha512` assets for other variants.
+- Host git hooks run through mise shims: if `mise ERROR No version is set for shim: jaq` blocks
+  a commit, fix with `mise use -g jaq@3.1.1`.
 - No `pip`/`uv`/`vncdotool` on host; `python3-pip` not installed. PIL available. `sshpass` available.
 - Live passwords for consoles: `live: evil`, `root: toor`.
 - Session timeline (UTC): first boot ≈19:30 desktop; `system_reset` ≈19:56; fresh session desktop 20:04,
