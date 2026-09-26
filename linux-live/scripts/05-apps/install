@@ -113,3 +113,11 @@ fi
 if pkg_is_installed "gnome-software"; then
     mkdir -p /var/cache/swcatalog/cache
 fi
+
+# ============================================
+# Custom setup for Toolbox/Ultra editions
+# ============================================
+if [ -f "${SCRIPT_DIR}/custom-setup.sh" ]; then
+    echo "Running custom-setup.sh..."
+    bash "${SCRIPT_DIR}/custom-setup.sh" || echo "WARNING: custom-setup.sh failed"
+fi
