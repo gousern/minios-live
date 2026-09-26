@@ -295,23 +295,6 @@ jobs:
           find /usr/share -name "__pycache__" -type d -exec rm -rf {} \; 2>/dev/null || true
           rm -f /root/.bash_history /home/live/.bash_history 2>/dev/null || true
           
-          # Extra cleanup
-          echo "=== Extra cleanup started ==="
-          rm -rf /lib/modules/*/kernel/drivers/staging 2>/dev/null || true
-          rm -rf /lib/modules/*/kernel/drivers/media 2>/dev/null || true
-          rm -rf /usr/src/linux-headers-* 2>/dev/null || true
-          rm -rf /usr/lib/xorg/modules/drivers/*_drv.so 2>/dev/null || true
-          find /usr/share/fonts -type f \( -name "*.pcf" -o -name "*.pcf.gz" \) -delete 2>/dev/null || true
-          find /usr/share/icons -mindepth 1 -maxdepth 1 -type d \
-            ! -name "hicolor" ! -name "default" ! -name "Adwaita" \
-            -exec rm -rf {} \; 2>/dev/null || true
-          find /usr/share/themes -mindepth 1 -maxdepth 1 -type d \
-            ! -name "Default" ! -name "Adwaita" \
-            -exec rm -rf {} \; 2>/dev/null || true
-          rm -rf /usr/share/sounds/* 2>/dev/null || true
-          rm -rf /usr/share/backgrounds/* 2>/dev/null || true
-          rm -rf /usr/share/applications/*.desktop 2>/dev/null || true
-          
           echo "=== Cleanup completed ==="
           echo "=== Disk usage after full cleanup ==="
           df -h /
