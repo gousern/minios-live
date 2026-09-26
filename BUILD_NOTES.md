@@ -194,10 +194,21 @@ minios-live/
 ### Structure
 ```
 linux-live/scripts/07-customs/
-├── packages.list          # Your custom packages
+├── packages.list          # Your custom packages (from dotfiles/system-provision.sh)
 ├── install                # Build script
 └── rootcopy-install/      # Files to copy to ISO
+    └── usr/local/bin/     # Scripts (macos_style_keyboard.sh)
 ```
+
+### Packages Included (from dotfiles/system-provision.sh)
+- Base: gawk, fontconfig, fonts-noto-color-emoji, git, tree, curl, wget, vim
+- XFCE/X11: xinput, xfce4-genmon-plugin, libnotify-bin
+- Fcitx5: fcitx5, fcitx5-chewing
+- Media: mpv, mpv-mpris, ffmpeg, socat, jq, playerctl
+- Audio: pamixer
+- Android: adb, openssh-client
+- Cloudflare WARP (with repository setup)
+- mise (via curl)
 
 ### How to Add Packages
 1. Edit `linux-live/scripts/07-customs/packages.list`
