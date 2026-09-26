@@ -170,8 +170,12 @@ minios-live/
 **Fix**: Use `toolbox` or `ultra` variant
 
 ### Issue: Theme not applied
-**Cause**: XFCE config not in `/etc/skel`
-**Fix**: Check `04-xfce-desktop/rootcopy-install/etc/skel/`
+**Cause**: `04-xfce-desktop/install` had `rm -rf /usr/share/backgrounds` which deleted MiniOS backgrounds before they were copied
+**Fix**: Removed the destructive `rm -rf` line
+
+### Issue: Cloudflare WARP missing
+**Cause**: Cloudflare repository wasn't added during build (only at boot time via `system-provision.sh`)
+**Fix**: Added Cloudflare WARP repository setup to `05-apps/install` before `condinapt` runs
 
 ---
 
