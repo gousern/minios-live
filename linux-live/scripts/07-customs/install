@@ -95,6 +95,41 @@ if [ -f "${SCRIPT_DIR}/rootcopy-install/usr/local/bin/screen.sh" ]; then
 fi
 
 # ============================================
+# Setup Fcitx5 input method
+# ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Setting up Fcitx5 input method..."
+fi
+
+# Write fcitx5 profile for new users
+mkdir -p /etc/skel/.config/fcitx5
+cat > /etc/skel/.config/fcitx5/profile << 'PROFILE_EOF'
+[Groups/0]
+Name=Default
+Default Layout=us
+DefaultIM=chewing
+
+[Groups/0/Items/0]
+Name=keyboard-us
+Layout=
+
+[Groups/0/Items/1]
+Name=chewing
+Layout=
+
+[GroupOrder]
+0=Default
+PROFILE_EOF
+
+# Set environment variables for input method
+mkdir -p /etc/skel
+cat >> /etc/skel/.xprofile << 'XPROFILE_EOF'
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS="@im=fcitx"
+XPROFILE_EOF
+
+# ============================================
 # Refresh font cache
 # ============================================
 if [ "$VERBOSITY_LEVEL" -ge 1 ]; then

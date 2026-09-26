@@ -210,6 +210,12 @@ linux-live/scripts/07-customs/
 - Cloudflare WARP (with repository setup)
 - mise (via curl)
 
+### Files Included (from dotfiles)
+- `accels.scm` → `/etc/skel/.config/xfce4/terminal/` (Firefox/terminal shortcuts)
+- `xfce4-keyboard-shortcuts.xml` → `/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/` (XFCE shortcuts)
+- `macos_style_keyboard.sh` → `/usr/local/bin/` (keyboard setup script)
+- `screen.sh` → `/usr/local/bin/` (resolution fix script)
+
 ### How to Add Packages
 1. Edit `linux-live/scripts/07-customs/packages.list`
 2. Add package names (one per line)
