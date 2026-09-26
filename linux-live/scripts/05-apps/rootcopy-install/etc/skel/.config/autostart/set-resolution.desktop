@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Set Resolution
+Comment=Set display to 1280x800@60Hz on login
+Exec=/home/live/bin/screen.sh
+Terminal=false
+StartupNotify=false
+OnlyShowIn=XFCE;GNOME;KDE;LXDE;LXQt;MATE;Cinnamon;Unity;
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=2

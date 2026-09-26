@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=macOS Keyboard Shortcuts
+Comment=Apply macOS-style keyboard mapping on login
+Exec=/home/live/bin/macos_style_keyboard.sh
+Terminal=false
+StartupNotify=false
+OnlyShowIn=XFCE;GNOME;KDE;LXDE;LXQt;MATE;Cinnamon;Unity;
+X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-Delay=3
