@@ -257,6 +257,11 @@ jobs:
               dkms autoinstall || echo "WARNING: DKMS autoinstall had errors"
           fi
           
+          # Mise (live user only, installed via curl)
+          if command -v curl &> /dev/null; then
+              sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          fi
+          
           # Locale and Timezone
           echo "zh_TW.UTF-8 UTF-8" >> /etc/locale.gen
           echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
