@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Version=1.0
-Name=macOS Keyboard Shortcuts
-Comment=Apply macOS-style keyboard mapping on login
-Exec=/home/live/bin/macos_style_keyboard.sh
+Name=macOS Style Firefox Fonts
+Comment=Apply macOS-style Firefox fonts and settings on login
+Exec=/home/live/bin/macos_style_firefox_fonts.sh
 Terminal=false
 StartupNotify=false
 OnlyShowIn=XFCE;GNOME;KDE;LXDE;LXQt;MATE;Cinnamon;Unity;

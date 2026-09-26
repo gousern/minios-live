@@ -56,8 +56,8 @@ cat > /etc/skel/.config/autostart/apply-keyboard.desktop << 'EOF'
 [Desktop Entry]
 Type=Application
 Name=Apply Keyboard Settings
-Comment=Apply macOS-style keyboard mapping
-Exec=/bin/bash -c "sleep 2 && setxkbmap -layout us -variant mac -option 'ctrl:swapcaps,altwin:swap_alt_win' && [ -f /etc/X11/xmodmap/macos.xmodmap ] && xmodmap /etc/X11/xmodmap/macos.xmodmap"
+Comment=Apply macOS-style keyboard mapping and Firefox fonts
+Exec=/home/live/bin/macos_style_firefox_fonts.sh
 Terminal=false
 X-GNOME-Autostart-enabled=true
 EOF
