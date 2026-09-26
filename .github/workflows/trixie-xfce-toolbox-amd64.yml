@@ -13,7 +13,7 @@ jobs:
     steps:
     - name: Clone minios-live Repository
       run: |
-        git clone --depth 1 --branch ${{ github.event.inputs.tag }} https://github.com/minios-linux/minios-live.git
+        git clone --depth 1 --branch ${{ github.event.inputs.tag }} https://github.com/gousern/minios-live.git
         cd minios-live
 
     - name: Install dependencies
