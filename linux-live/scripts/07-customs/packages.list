@@ -1,0 +1,29 @@
+# ========================================
+# == Custom Packages (Your Choice)      ==
+# ========================================
+
+# ── Cloudflare WARP ────────────────────────────────────────
+cloudflare-warp
+
+# ── VPN & Network Tools ────────────────────────────────────
+# wireguard
+# openvpn
+
+# ── Dev Tools ──────────────────────────────────────────────
+# git
+# curl
+# wget
+# build-essential
+
+# ── Extra Fonts (if needed) ────────────────────────────────
+# fonts-noto
+# fonts-noto-cjk
+# fonts-noto-color-emoji
+
+# ── Additional Apps ────────────────────────────────────────
+# KeepassXC is already in 05-apps
+# vlc is already in 05-apps
+
+# ========================================
+# Add your packages below this line
+# ========================================

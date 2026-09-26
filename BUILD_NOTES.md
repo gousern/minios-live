@@ -89,3 +89,126 @@ unsquashfs -l image.sb | grep -E "font|theme|background"
 # Test in QEMU
 qemu-system-x86_64 -cdrom output.iso -m 4G -enable-kvm
 ```
+
+---
+
+## User Workflow
+
+- **Fork**: User maintains a personal fork of minios-live
+- **Build trigger**: GitHub Actions, triggered manually from `.github/workflows/`
+- **Workflow**: `trixie-xfce-toolbox-amd64.yml` - builds XFCE ISO with toolbox packages
+- **Verify**: Download ISO from GitHub releases, test in QEMU or VM
+
+### How to Make Changes
+1. Edit files in your fork
+2. Push to your fork
+3. Trigger build in GitHub Actions
+4. Wait ~30-60 min for build to complete
+5. Download ISO from releases
+6. Test in QEMU: `qemu-system-x86_64 -cdrom output.iso -m 4G -enable-kvm`
+
+### Quick Verification After Build
+```bash
+# Mount the ISO and check for key files
+sudo mkdir /mnt/iso
+sudo mount -o loop output.iso /mnt/iso
+
+# Check squashfs contents
+sudo unsquashfs -l /mnt/iso/casper/filesystem.squashfs | grep -E "font|theme|background|cloudflare"
+
+# Check for XFCE theme
+sudo unsquashfs -l /mnt/iso/casper/filesystem.squashfs | grep -i "minios"
+
+# Check for fonts
+sudo unsquashfs -l /mnt/iso/casper/filesystem.squashfs | grep -E "Inter|JetBrains"
+```
+
+---
+
+## Project Structure (Quick Reference)
+
+```
+minios-live/
+├── linux-live/
+│   ├── build.conf              # Main build config
+│   ├── minioslib               # Core build functions
+│   ├── condinapt               # Conditional package installer
+│   ├── environments/
+│   │   └── xfce/               # XFCE environment config
+│   │       ├── 01-minimal/     # Minimal packages
+│   │       ├── 02-standard/    # Standard packages  
+│   │       ├── 03-full/        # Full packages
+│   │       └── 05-apps/        # Extra apps (Cloudflare WARP)
+│   └── scripts/
+│       ├── 00-core/            # Base system
+│       ├── 01-kernel/          # Kernel + DKMS
+│       ├── 02-firmware/        # Hardware firmware
+│       ├── 03-gui-base/        # X11 + fonts
+│       ├── 04-xfce-desktop/    # XFCE + theme
+│       ├── 05-apps/            # Extra applications
+│       └── 10-firefox/         # Firefox ESR
+├── .github/workflows/
+│   ├── build-minios.yml        # Main CI (⚠️ has cleanup logic)
+│   └── trixie-xfce-*.yml       # Specific builds
+└── BUILD_NOTES.md              # This file
+```
+
+---
+
+## Common Issues & Fixes
+
+### Issue: Apps missing from menu
+**Cause**: `.desktop` files deleted by cleanup
+**Fix**: Check `build-minios.yml` cleanup section
+
+### Issue: Fonts broken
+**Cause**: Fonts deleted or not installed
+**Fix**: Check `03-gui-base` and `rootcopy-install` directories
+
+### Issue: Cloudflare WARP missing
+**Cause**: Using `standard` variant (skips 05-apps)
+**Fix**: Use `toolbox` or `ultra` variant
+
+### Issue: Theme not applied
+**Cause**: XFCE config not in `/etc/skel`
+**Fix**: Check `04-xfce-desktop/rootcopy-install/etc/skel/`
+
+---
+
+## Important Files to Monitor
+
+- `.github/workflows/build-minios.yml` - CI cleanup logic
+- `linux-live/build.conf` - Package variant settings
+- `linux-live/scripts/*/rootcopy-install/` - Files copied to ISO
+- `linux-live/environments/xfce/05-apps/` - Extra applications list
+- `linux-live/scripts/07-customs/` - **Your custom packages module**
+
+---
+
+## Custom Module: 07-customs
+
+### Structure
+```
+linux-live/scripts/07-customs/
+├── packages.list          # Your custom packages
+├── install                # Build script
+└── rootcopy-install/      # Files to copy to ISO
+```
+
+### How to Add Packages
+1. Edit `linux-live/scripts/07-customs/packages.list`
+2. Add package names (one per line)
+3. Push to your fork
+4. Trigger build
+
+### How to Add Files (fonts, configs, etc.)
+1. Put files in `linux-live/scripts/07-customs/rootcopy-install/`
+2. Mirror the target path (e.g., `usr/share/fonts/` for fonts)
+3. Push and build
+
+### Build Verification
+The workflow now shows:
+- Available modules
+- 07-customs contents
+- Squashfs contents after build
+- Cloudflare WARP and fonts check

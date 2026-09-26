@@ -13,7 +13,7 @@ jobs:
     steps:
     - name: Clone minios-live Repository
       run: |
-        git clone --depth 1 --branch ${{ github.event.inputs.tag }} https://github.com/gousern/minios-live.git
+        git clone --depth 1 --branch ${{ github.event.inputs.tag }} ${{ github.server_url }}/${{ github.repository }}.git
         cd minios-live
 
     - name: Install dependencies
@@ -27,17 +27,54 @@ jobs:
     - name: Run build - Debian 13 XFCE Toolbox amd64
       run: |
         cd minios-live
-        echo "Starting build for Debian 13 XFCE Toolbox amd64..."
+        echo "========================================"
+        echo "Starting build for Debian 13 XFCE Toolbox amd64"
+        echo "========================================"
+        
+        # Show what modules are available
+        echo "\n--- Available modules in environments/xfce/ ---"
+        ls -la linux-live/environments/xfce/
+        echo "\n--- Custom module contents ---"
+        if [ -d "linux-live/scripts/07-customs" ]; then
+          echo "07-customs/packages.list:"
+          cat linux-live/scripts/07-customs/packages.list
+          echo "\n07-customs/install:"
+          cat linux-live/scripts/07-customs/install
+        else
+          echo "WARNING: 07-customs module not found!"
+        fi
+        
         # Extract version from tag (remove 'v' prefix if present)
         RELEASE_VERSION="${{ github.event.inputs.tag }}"
         RELEASE_VERSION="${RELEASE_VERSION#v}"
         export RELEASE_VERSION
-        echo "Building with RELEASE_VERSION: $RELEASE_VERSION"
+        echo "\nBuilding with RELEASE_VERSION: $RELEASE_VERSION"
+        
+        # Build with verbosity level 2 (very verbose)
+        export VERBOSITY_LEVEL=2
         sudo -E ./minios-cmd -d trixie -a amd64 -de xfce -pv toolbox -dkms -kl -ib dracut
+        
+        echo "\n========================================"
+        echo "Build completed!"
+        echo "========================================"
         sudo mkdir -p build/output/trixie-xfce-toolbox-amd64
         sudo mv build/iso/*.iso build/output/trixie-xfce-toolbox-amd64/
         sudo mv build/iso/*.sha256 build/output/trixie-xfce-toolbox-amd64/ || true
-        echo "Build completed for Debian 13 XFCE Toolbox amd64."
+        
+        # Show what's in the ISO
+        echo "\n--- ISO contents check ---"
+        if [ -f "build/output/trixie-xfce-toolbox-amd64/*.iso" ]; then
+          ISO_FILE=$(ls build/output/trixie-xfce-toolbox-amd64/*.iso | head -1)
+          echo "Checking squashfs contents for custom packages..."
+          sudo mount -o loop "$ISO_FILE" /mnt 2>/dev/null || true
+          if [ -f "/mnt/casper/filesystem.squashfs" ]; then
+            echo "Cloudflare WARP:"
+            sudo unsquashfs -l /mnt/casper/filesystem.squashfs 2>/dev/null | grep -i cloudflare || echo "  Not found"
+            echo "Custom fonts:"
+            sudo unsquashfs -l /mnt/casper/filesystem.squashfs 2>/dev/null | grep -i "inter\|jetbrains" || echo "  Not found"
+          fi
+          sudo umount /mnt 2>/dev/null || true
+        fi
 
     - name: Archive build output - Debian 13 XFCE Toolbox amd64
       uses: actions/upload-artifact@v4
