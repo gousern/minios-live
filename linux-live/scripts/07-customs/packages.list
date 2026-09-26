@@ -1,29 +1,53 @@
 # ========================================
-# == Custom Packages (Your Choice)      ==
+# == Custom Packages (from dotfiles)    ==
 # ========================================
+
+# ── Base Packages ──────────────────────────────────────────
+gawk
+fontconfig
+fonts-noto-color-emoji
+git
+tree
+curl
+wget
+vim
+ca-certificates
+gnupg
+lsb-release
+
+# ── Kernel Headers ─────────────────────────────────────────
+linux-headers-amd64
+
+# ── XFCE & X11 ────────────────────────────────────────────
+xinput
+xfce4-genmon-plugin
+libnotify-bin
+
+# ── Input Method (Fcitx5) ──────────────────────────────────
+fcitx5
+fcitx5-chewing
+
+# ── Media & Utilities ──────────────────────────────────────
+mpv
+mpv-mpris
+ffmpeg
+socat
+jq
+playerctl
+
+# ── Audio ──────────────────────────────────────────────────
+pamixer
+
+# ── Android ────────────────────────────────────────────────
+adb
+openssh-client
 
 # ── Cloudflare WARP ────────────────────────────────────────
 cloudflare-warp
 
-# ── VPN & Network Tools ────────────────────────────────────
-# wireguard
-# openvpn
-
 # ── Dev Tools ──────────────────────────────────────────────
-# git
-# curl
-# wget
-# build-essential
-
-# ── Extra Fonts (if needed) ────────────────────────────────
-# fonts-noto
-# fonts-noto-cjk
-# fonts-noto-color-emoji
-
-# ── Additional Apps ────────────────────────────────────────
-# KeepassXC is already in 05-apps
-# vlc is already in 05-apps
+# mise is installed via curl, not apt
 
 # ========================================
-# Add your packages below this line
+# Add more packages below this line
 # ========================================

@@ -3,7 +3,7 @@
 # ========================================
 # == Custom Packages Module             ==
 # ========================================
-# This module installs your custom packages.
+# This module installs packages from your dotfiles/system-provision.sh
 # Edit packages.list to add/remove packages.
 
 set -e          # exit on error
@@ -17,7 +17,30 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 console_colors
 
+# ============================================
+# Add Cloudflare WARP repository
+# ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Setting up Cloudflare WARP repository..."
+fi
+
+install -m 0755 -d /usr/share/keyrings /etc/apt/sources.list.d
+
+curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg \
+    | gpg --yes --dearmor \
+    --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg 2>/dev/null || true
+
+chmod 0644 /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg 2>/dev/null || true
+
+cat >/etc/apt/sources.list.d/cloudflare-client.list <<EOF
+deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ ${DISTRIBUTION} main
+EOF
+
+apt-get update --allow-releaseinfo-change 2>/dev/null || true
+
+# ============================================
 # Install packages from list
+# ============================================
 /condinapt -l "${SCRIPT_DIR}/packages.list" -c "${SCRIPT_DIR}/minios_build.conf" -m "${SCRIPT_DIR}/condinapt.map"
 if [ $? -ne 0 ]; then
     echo "Failed to install packages."
@@ -25,12 +48,21 @@ if [ $? -ne 0 ]; then
 fi
 
 # ============================================
-# Custom post-install setup
+# Install mise via curl (not apt)
 # ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Installing mise..."
+fi
 
-# Example: Add user to specific groups
-# USER_GROUPS_DIR="/usr/share/live/config/user-default-groups.d"
-# mkdir -p "${USER_GROUPS_DIR}"
-# printf '%s\n' "wireshark" >"${USER_GROUPS_DIR}/wireshark.groups"
+curl -fsSL https://mise.run | bash 2>/dev/null || echo "WARNING: mise install failed"
+
+# ============================================
+# Refresh font cache
+# ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Refreshing font cache..."
+fi
+
+fc-cache -fv >/dev/null 2>&1 || true
 
 echo "Custom packages installed successfully."
