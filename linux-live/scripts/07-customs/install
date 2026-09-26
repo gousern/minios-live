@@ -57,6 +57,44 @@ fi
 curl -fsSL https://mise.run | bash 2>/dev/null || echo "WARNING: mise install failed"
 
 # ============================================
+# Apply macOS-style keyboard shortcuts
+# ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Applying macOS-style keyboard shortcuts..."
+fi
+
+# Set keyboard layout to US Apple model with Ctrl/Win swap
+setxkbmap -layout us -model apple 2>/dev/null || true
+setxkbmap -option ctrl:swap_lwin_lctl 2>/dev/null || true
+
+# Copy keyboard shortcuts to skel (for new users)
+mkdir -p /etc/skel/.config/xfce4/terminal
+mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
+
+if [ -f "${SCRIPT_DIR}/rootcopy-install/etc/skel/.config/xfce4/terminal/accels.scm" ]; then
+    cp "${SCRIPT_DIR}/rootcopy-install/etc/skel/.config/xfce4/terminal/accels.scm" \
+       /etc/skel/.config/xfce4/terminal/accels.scm
+fi
+
+if [ -f "${SCRIPT_DIR}/rootcopy-install/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml" ]; then
+    cp "${SCRIPT_DIR}/rootcopy-install/etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml" \
+       /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-keyboard-shortcuts.xml
+fi
+
+# ============================================
+# Install screen.sh for resolution fix
+# ============================================
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Installing screen.sh..."
+fi
+
+mkdir -p /usr/local/bin
+if [ -f "${SCRIPT_DIR}/rootcopy-install/usr/local/bin/screen.sh" ]; then
+    cp "${SCRIPT_DIR}/rootcopy-install/usr/local/bin/screen.sh" /usr/local/bin/screen.sh
+    chmod +x /usr/local/bin/screen.sh
+fi
+
+# ============================================
 # Refresh font cache
 # ============================================
 if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
