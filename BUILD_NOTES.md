@@ -41,6 +41,77 @@ Removed the destructive lines. Safe cleanup preserved:
 
 ---
 
+## 2026 - Verifying a Built ISO (Static + Runtime)
+
+### Problem
+After a rebuild, "the files are in the image" is not enough to trust. A file present in a squashfs can still be hidden at runtime, and a theme that looks correct statically can still regress on boot.
+
+### Two Levels of Truth
+**Static** (mount the downloaded, sha256-verified ISO):
+```bash
+sudo mount -o loop *.iso /mnt/iso
+# are the scripts/fonts baked where they should be?
+sudo unsquashfs -l /mnt/iso/minios/07-customs-amd64.sb | grep "home/live/bin"
+sudo unsquashfs -l /mnt/iso/minios/07-customs-amd64.sb | grep -i pingfang
+# are they MASKED by a lower layer? (runtime truth)
+for m in 05-apps-amd64 06-firefox-amd64 07-customs-amd64; do
+  sudo unsquashfs -ll /mnt/iso/minios/$m.sb | grep -E "^[cb]" | grep -iE "home/live|usr/local"
+done
+```
+**Runtime** (headless QEMU): boot, open a terminal, list the files, `fc-list | grep -ci pingfang`.
+
+### Lessons
+**1. Presence in squashfs ≠ visibility at runtime — check whiteouts.**
+A layer hiding a file leaves a *whiteout*: a char/block device entry (mode line starts with `c` or `b`). Scanning every layer for `^[cb]` on the target path is the only reliable runtime-presence check.
+
+**2. Static ≠ working.** Static checks proved the theme config existed; only a boot proved the desktop actually rendered the wallpaper/icons and that skel seeding had applied `show-filesystem=false` (Home + Trash only).
+
+### Tooling: headless screenshot + typed commands
+```bash
+qemu-system-x86_64 -enable-kvm -m 4096 -cdrom ISO -vga std -display none \
+  -monitor unix:/tmp/mon.sock,server,nowait -pidfile qemu.pid
+echo "screendump /tmp/x.ppm" | socat - unix-connect:/tmp/mon.sock   # screenshot
+echo "sendkey ctrl-alt-t"    | socat - unix-connect:/tmp/mon.sock   # opens a terminal
+```
+`sendkey` **can** type into `xfce4-terminal` (fcitx did not swallow it, unlike in a GTK appfinder entry). Gotchas:
+- **Uppercase letters are silently DROPPED unless sent as `shift-<lowercase>`** — `PingFang` typed as `ingang`.
+- `|` = `shift-backslash`, space = `spc`, `/` = `slash`, `-` = `minus`, `.` = `dot`.
+- Desktop appears ~2 min after boot; the screen is all-black before X starts.
+
+### Lesson
+**Verify at both levels and never trust presence alone: `unsquashfs` for what is packed, a QEMU boot for what is reachable.**
+
+---
+
+## 2026 - release.yml 403 on Every Tag
+
+### Problem
+Pushing any `v*` tag failed `release.yml` in ~11 s with:
+```
+HTTP 403: Resource not accessible by integration
+```
+
+### Root Cause
+The repo's default `GITHUB_TOKEN` is read-only. `trixie-xfce-toolbox-amd64.yml` declares `permissions: contents: write` (it must upload the ISO), but **`release.yml` had no `permissions` block**, so `gh release create` was refused.
+
+### Workaround (used for v5.2.3 & v5.2.4)
+```bash
+gh release create vX.Y.Z-custom --repo gousern/minios-live --title "..." --notes "..."
+gh workflow run trixie-xfce-toolbox-amd64.yml --ref master -f tag=vX.Y.Z-custom
+```
+
+### Fix (one line, still pending)
+```yaml
+# .github/workflows/release.yml — top level or on the release job
+permissions:
+  contents: write
+```
+
+### Lesson
+When a workflow 403s on `GITHUB_TOKEN`, compare its `permissions:` block against a sibling workflow that works — the missing key is usually the whole story.
+
+---
+
 ## Module System Overview
 
 ### skip_conditions.conf
