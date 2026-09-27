@@ -85,19 +85,6 @@ if [ -f "${SCRIPT_DIR}/rootcopy-install/etc/skel/.config/xfce4/xfconf/xfce-perch
 fi
 
 # ============================================
-# Install screen.sh for resolution fix
-# ============================================
-if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
-    echo "Installing screen.sh..."
-fi
-
-mkdir -p /usr/local/bin
-if [ -f "${SCRIPT_DIR}/rootcopy-install/usr/local/bin/screen.sh" ]; then
-    cp "${SCRIPT_DIR}/rootcopy-install/usr/local/bin/screen.sh" /usr/local/bin/screen.sh
-    chmod +x /usr/local/bin/screen.sh
-fi
-
-# ============================================
 # Setup Fcitx5 input method
 # ============================================
 if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
@@ -142,9 +129,29 @@ fi
 fc-cache -fv >/dev/null 2>&1 || true
 
 # ============================================
+# Bake PingFang fonts into the live home (works offline on first boot)
+# ============================================
+# macos_style_firefox_fonts.sh otherwise downloads the fonts at login, but the
+# first boot usually has no network yet, so /home/live/.local/share/fonts is
+# left empty. Run it here with HOME=/home/live so the .otf files and the
+# fontconfig rule are baked into the image. The Firefox step always fails at
+# build time (no profile exists until Firefox has run once) - that is expected,
+# so ignore the exit code; the login autostart finishes the Firefox part later.
+if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+    echo "Baking PingFang fonts into /home/live/.local/share/fonts..."
+fi
+
+if [ -f /home/live/bin/macos_style_firefox_fonts.sh ]; then
+    HOME=/home/live bash /home/live/bin/macos_style_firefox_fonts.sh \
+        || echo "NOTE: PingFang bake returned non-zero (no Firefox profile at build is expected); see STEP 2 above for font clone status"
+else
+    echo "WARNING: /home/live/bin/macos_style_firefox_fonts.sh not found; PingFang fonts not baked"
+fi
+
+# ============================================
 # Seed the baked live user home with skel configs
 # ============================================
-# /home/live is baked into the image by 05-apps rootcopy, and Debian's
+# /home/live is baked into the image by this module's rootcopy, and Debian's
 # adduser skips the /etc/skel copy when the home dir already exists
 # ("home directory already exists. Not touching this directory").
 # Without this copy the live session gets no xfce4 theme/wallpaper,
