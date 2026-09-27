@@ -213,6 +213,9 @@ fi
 # Added by jcode installer
 export PATH="/home/live/.local/bin:$PATH"
 
+# user scripts dir: run helpers (im.sh, screen.sh, macos_style_*.sh) directly
+export PATH="$HOME/bin:$PATH"
+
 # ── git 分支提示 ──
 parse_git_branch() {
   local b
