@@ -97,12 +97,18 @@ jobs:
         id: set_tag
         run: echo "tag_name=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
 
-      - name: Upload Release Assets
+      - name: Create or Update Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           repo=${{ github.repository }}
           tag_name=${{ steps.set_tag.outputs.tag_name }}
+          
+          # Create release if it doesn't exist
+          gh release view "$tag_name" --repo "$repo" >/dev/null 2>&1 || \
+            gh release create "$tag_name" --repo "$repo" --title "$tag_name" --generate-notes
+          
+          # Upload all artifacts
           for artifact_dir in ./artifacts/*; do
             for artifact in "$artifact_dir"/*; do
               gh release upload "$tag_name" "$artifact" --repo "$repo" --clobber
