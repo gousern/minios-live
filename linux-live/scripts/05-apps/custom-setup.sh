@@ -24,10 +24,10 @@ cat > /etc/default/keyboard << 'EOF'
 
 # Consult the keyboard(5) manual page.
 
-XKBMODEL="pc105"
+XKBMODEL="apple"
 XKBLAYOUT="us"
 XKBVARIANT="mac"
-XKBOPTIONS="ctrl:swapcaps,altwin:swap_alt_win"
+XKBOPTIONS="ctrl:swap_lwin_lctl"
 
 VARIANTIGNORE=""
 LAYOUTIGNORE=""
@@ -44,7 +44,7 @@ Section "InputClass"
     MatchIsKeyboard "on"
     Option "XkbLayout" "us"
     Option "XkbVariant" "mac"
-    Option "XkbOptions" "ctrl:swapcaps,altwin:swap_alt_win"
+    Option "XkbOptions" "ctrl:swap_lwin_lctl"
 EndSection
 EOF
 
