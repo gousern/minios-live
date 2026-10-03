@@ -110,10 +110,45 @@ assert_kernel_lines() {
     done
 }
 
-@test "accepted menu keeps Start MiniOS as automatic default" {
+@test "every generated kernel entry requests OverlayFS instead of AUFS" {
     SERIAL_CONSOLE="false"
     create_config_files
 
+    assert_kernel_lines 'union=overlayfs'
+}
+
+@test "accepted menu keeps Run from RAM (toram=full) as automatic default" {
+    SERIAL_CONSOLE="false"
+    create_config_files
+
+    # set default=0 selects the first menuentry, so the ram entry must come first.
+    grep -Fxq 'set default=0' "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg"
+    grep -Fxq 'set default=0' "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg"
+
+    for file in "${WORK_DIR}/image/${LIVEKITNAME}/boot/syslinux/lang/"*.cfg; do
+        toram_line=$(grep -n -F 'toram=full' "$file" | head -n1 | cut -d: -f1)
+        resume_line=$(grep -n -F 'perchdir=resume' "$file" | head -n1 | cut -d: -f1)
+        [ -n "${toram_line}" ]
+        [ -n "${resume_line}" ]
+        [ "${toram_line}" -lt "${resume_line}" ]
+    done
+
+    ram_line=$(grep -n -F 'menuentry "$copyram" --class ram' \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg" | cut -d: -f1)
+    resume_line=$(grep -n -F 'menuentry "$resume" --class resume' \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg" | cut -d: -f1)
+    [ "${ram_line}" -lt "${resume_line}" ]
+
+    ram_line=$(grep -n -F 'menuentry "Run from RAM" --class ram' \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg" | cut -d: -f1)
+    resume_line=$(grep -n -F 'menuentry "Start MiniOS" --class resume' \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg" | cut -d: -f1)
+    [ "${ram_line}" -lt "${resume_line}" ]
+
+    grep -Fq 'toram=full' "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg"
+    grep -Fq 'toram=full' "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg"
+
+    # Every session must remain reachable from the menu.
     grep -Fxq 'set resume=$"Start MiniOS"' \
         "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg"
     grep -Fq 'menuentry "$resume" --class resume' \
