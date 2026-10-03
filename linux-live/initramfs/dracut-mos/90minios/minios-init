@@ -68,7 +68,7 @@ debug_shell
 mount_bundles "$DATA" "$BUNDLES"
 debug_shell
 
-# init aufs union, or setup overlayfs union
+# init overlayfs union, or setup aufs union
 init_union "$CHANGES" "$UNION" "$BUNDLES" ||
     fatal "Cannot construct the root union"
 

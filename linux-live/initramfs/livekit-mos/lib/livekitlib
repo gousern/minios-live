@@ -520,6 +520,8 @@ install_aufs_runtime_inventory() {
 # Detect which union filesystem to use
 # Can be overridden with union= kernel parameter
 #
+# Default: overlayfs
+#
 get_union_fs() {
    local UNION_PARAM=$(cmdline_value union)
 
@@ -544,11 +546,7 @@ get_union_fs() {
       esac
    fi
 
-   if aufs_is_supported >/dev/null; then
-      echo "aufs"
-   else
-      echo "overlayfs"
-   fi
+   echo "overlayfs"
 }
 
 # Get currently running kernel version
@@ -581,10 +579,10 @@ init_union_modules() {
        fi
    elif [ "$UNION_PARAM" = "overlayfs" ]; then
       modprobe overlay 2>/dev/null
-    else
-       load_aufs_module
-       if ! aufs_is_supported >/dev/null; then
-          modprobe overlay 2>/dev/null
+   else
+      modprobe overlay 2>/dev/null
+      if aufs_is_supported >/dev/null; then
+         load_aufs_module
       fi
    fi
    refresh_devs
