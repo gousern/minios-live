@@ -1368,3 +1368,122 @@ EOF
     [ "$(jq -r '.sessions["3"].size_mb' "$chandir/session.json")" = "2000" ]
     [ "$(jq -r '.sessions["3"].policy' "$chandir/session.json")" = "shutdown" ]
 }
+
+@test "user image mounts a labelled ext4 changes image through the loop device" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    IMAGE="$WORK/minios.dat"
+    : >"$IMAGE"
+    device_tag() { case "$1" in "$IMAGE") echo "$2" | grep -q TYPE && echo ext4 || echo persistent ;; *) : ;; esac; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run user_image_changes "$WORK/changes" "$WORK/missing.dat" "$IMAGE"
+
+    [ "$status" -eq 0 ]
+    grep -Fqx -- "-o loop,errors=remount-ro $IMAGE $WORK/changes" "$MINIOS_TEST_LOG"
+}
+
+@test "user image ignores storage MiniOS cannot write back to" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    IMAGE="$WORK/minios.dat"
+    : >"$IMAGE"
+    device_tag() { echo "$2" | grep -q TYPE && echo vfat || echo persistent; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run user_image_changes "$WORK/changes" "$IMAGE"
+
+    [ "$status" -ne 0 ]
+    ! grep -q loop "$MINIOS_TEST_LOG"
+}
+
+@test "user image leaves an absent image to the normal session flow" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+
+    run user_image_changes "$WORK/changes" "$WORK/nope.dat"
+
+    [ "$status" -ne 0 ]
+}
+
+@test "overlay union keeps volatile off durable uppers and on memory backed ones" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    stat() { echo "${STAT_FS:-ext4}"; }
+
+    [ "$(overlay_mount_options /changes /bundles/00-core.sb | grep -c volatile)" -eq 0 ]
+    STAT_FS=tmpfs
+    [ "$(overlay_mount_options /changes /bundles/00-core.sb | grep -c volatile)" -eq 1 ]
+}
+
+@test "overlay union mount options pin the immutable lower layers" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    OPTIONS=$(overlay_mount_options /changes /bundles/00-core.sb)
+
+    case "$OPTIONS" in
+    *"lowerdir=/bundles/00-core.sb"*upperdir=/changes/changes*workdir=/changes/workdir*) : ;;
+    *) echo "unexpected options: $OPTIONS"; exit 1 ;;
+    esac
+    case "$OPTIONS" in
+    *index=off,metacopy=off,redirect_dir=on) : ;;
+    *) echo "missing tuning options: $OPTIONS"; exit 1 ;;
+    esac
+}
+
+@test "explicit union=overlayfs falls back to aufs when overlay is unavailable" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    cmdline_value() { [ "$1" = union ] && echo overlayfs; }
+    overlay_is_supported() { return 1; }
+    aufs_is_supported() { return 0; }
+
+    [ "$(get_union_fs)" = aufs ]
+}
+
+@test "explicit union=overlayfs keeps overlay when the module is available" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    cmdline_value() { [ "$1" = union ] && echo overlayfs; }
+    overlay_is_supported() { return 0; }
+
+    [ "$(get_union_fs)" = overlayfs ]
+}
+
+@test "init_union mounts the overlay union with tuned options" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    bundles="$WORK/bundles"
+    changes="$WORK/changes"
+    union="$WORK/union"
+    mkdir -p "$bundles/01-core" "$bundles/02-apps" "$changes" "$union"
+    get_union_fs() { echo overlayfs; }
+    cmdline_value() { :; }
+    stat() { echo tmpfs; }
+    find() { printf '%s\n' "$bundles/01-core" "$bundles/02-apps"; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run init_union "$changes" "$union" "$bundles"
+
+    [ "$status" -eq 0 ]
+    EXPECTED="lowerdir=$bundles/02-apps:$bundles/01-core,upperdir=$changes/changes,workdir=$changes/workdir,index=off,metacopy=off,redirect_dir=on,volatile $union"
+    grep -Fq -- "$EXPECTED" "$MINIOS_TEST_LOG"
+}
+
+@test "init_union refuses to build an overlay union over no layers" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    bundles="$WORK/bundles"
+    changes="$WORK/changes"
+    union="$WORK/union"
+    mkdir -p "$bundles" "$changes" "$union"
+    get_union_fs() { echo overlayfs; }
+    cmdline_value() { :; }
+    find() { :; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run init_union "$changes" "$union" "$bundles"
+
+    [ "$status" -ne 0 ]
+    ! grep -q overlay "$MINIOS_TEST_LOG"
+}

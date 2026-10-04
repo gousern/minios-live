@@ -422,6 +422,34 @@ aufs_is_supported() {
    cat /proc/filesystems | grep aufs >/dev/null 2>&1
 }
 
+overlay_is_supported() {
+   cat /proc/filesystems | grep -w overlay >/dev/null 2>&1
+}
+
+# OverlayFS mount options for the union.
+# $1 = changes directory that becomes the upper layer
+# $2 = colon separated lower dirs
+#
+# SquashFS lower layers are immutable and the union is rebuilt from scratch on
+# every boot, so an index would only buy a full extra pass over every layer at
+# mount time, on media where reading is the scarce resource. metacopy would
+# copy lower metadata into the upper layer, which costs a write per lower file.
+# redirect_dir keeps directory renames O(1) instead of copying the whole tree
+# up, which is what dpkg and apt do constantly.
+overlay_mount_options() {
+   local CHANGES="$1"
+   local LOWERDIR="$2"
+   local FSTYPE
+
+   FSTYPE=$(stat -f -c %T "$CHANGES" 2>/dev/null)
+   printf '%s' "lowerdir=$LOWERDIR,upperdir=$CHANGES/changes,workdir=$CHANGES/workdir,index=off,metacopy=off,redirect_dir=on"
+   # A memory backed upper layer has nothing durable to flush, so let overlay
+   # skip the work directory entirely.
+   case "$FSTYPE" in
+   tmpfs | ramfs) printf '%s' ",volatile" ;;
+   esac
+}
+
 load_aufs_module() {
    modprobe aufs 2>/dev/null || modprobe aufs-ng 2>/dev/null
 }
@@ -537,7 +565,17 @@ get_union_fs() {
          fi
          ;;
       overlayfs)
-         echo "overlayfs"
+         # An explicit request must not hard fail the boot when the module is
+         # missing: fall back to AUFS when it can carry the union, and warn.
+         if overlay_is_supported >/dev/null; then
+            echo "overlayfs"
+         elif aufs_is_supported >/dev/null; then
+            echo "Warning: overlayfs requested but unavailable; using aufs instead" >&2
+            echo "aufs"
+         else
+            echo "Warning: overlayfs requested but unavailable and aufs is missing too" >&2
+            echo "overlayfs"
+         fi
          return
          ;;
       *)
@@ -612,7 +650,17 @@ init_union() {
       [ -n "$UNION_PARAM" ] && [ "$UNION_PARAM" = "overlayfs" ] && echo "(forced by union=$UNION_PARAM parameter)"
       mkdir -p "$1/changes"
       mkdir -p "$1/workdir"
-      mount -t overlay overlay -o lowerdir=$(find "$3" -mindepth 1 -maxdepth 1 | sortmod | tac | tr '\n' ':' | sed -r 's/:$//'),upperdir=$1/changes,workdir=$1/workdir $2
+      local LOWERDIR OPTIONS
+      LOWERDIR=$(find "$3" -mindepth 1 -maxdepth 1 | sortmod | tac | tr '\n' ':' | sed -r 's/:$//')
+      # An overlay union with no lower layers is not a union, it is a bare
+      # tmpfs root: refuse it here rather than boot a hollow system.
+      if [ -z "$LOWERDIR" ]; then
+         echo "No squashfs bundles found in $3; cannot build the overlay union"
+         return 1
+      fi
+      echo "* union layers: $(printf '%s' "$LOWERDIR" | awk -F: '{print NF}')"
+      OPTIONS=$(overlay_mount_options "$1" "$LOWERDIR") || return 1
+      mount -t overlay overlay -o "$OPTIONS" "$2"
    fi
 }
 
@@ -2364,6 +2412,51 @@ squashfs_generation_restore() {
 # $1 = data directory
 # $2 = target changes directory
 #
+# Adopt a pre-created filesystem image file as the changes layer.
+# Typical setup on the USB stick:
+#     dd if=/dev/zero of=minios.dat bs=1M count=8192
+#     mkfs.ext4 -L persistent minios.dat
+# The "persistent" label is what MiniOS greps for, so an unlabelled image is
+# still used but announced, never silently ignored.
+# $1 = changes directory
+# $2... = candidate image paths
+user_image_changes() {
+   local CHANGES="$1"
+   shift
+   local CANDIDATE TYPE LABEL
+
+   for CANDIDATE in "$@"; do
+      [ -f "$CANDIDATE" ] || continue
+      TYPE=$(device_tag "$CANDIDATE" TYPE)
+      case "$TYPE" in
+      ext2 | ext3 | ext4) ;;
+      *)
+         echo "Ignoring changes image $(basename "$CANDIDATE") (filesystem '$TYPE')"
+         continue
+         ;;
+      esac
+
+      LABEL=$(device_tag "$CANDIDATE" LABEL)
+      echo_white_star
+      if [ "$LABEL" = "persistent" ]; then
+         echo "Mounting persistent changes from $(basename "$CANDIDATE")"
+      else
+         echo "Mounting changes from $(basename "$CANDIDATE") (label '$LABEL')"
+      fi
+      if mount -o loop,errors=remount-ro "$CANDIDATE" "$CHANGES"; then
+         MINIOS_CHANGES_IMAGE="$CANDIDATE"
+         return 0
+      fi
+      boot_warning_notify error persistence "Changes image $(basename "$CANDIDATE") could not be mounted."
+      return 1
+   done
+
+   return 1
+}
+
+# $1 = changes directory
+# $2 = target changes directory
+#
 persistent_changes() {
    debug_log "persistent_changes" "$*"
    local DATA CHANGES DRIVE CHANDIR PERCHDIR PERCHSIZE PERCHFILE FS_TYPE PERCHFILE_EXISTS SPECIFIED AVAILABLE_SPACE MAX_SIZE MOUNT_OPTS PERCHMODE ACTION PERCHSESSION CURRENT_SIZE CURRENT_USAGE NEW_SESSION AUTO_RESUME
@@ -2901,6 +2994,17 @@ persistent_changes() {
 
    # Setup the directory anyway, it will be used in all cases
    mkdir -p "$CHANGES"
+
+   # A pre-created ext4 image file is the simplest persistence to set up and
+   # survives a USB stick being wiped of partitions. Honour it before any
+   # session logic so a hand-made image always wins.
+   if user_image_changes "$CHANGES" \
+      "$DATA/minios.dat" \
+      "$DATAMNT/minios.dat" \
+      "$DATAMNT/storage/minios.dat" \
+      "$DATAMNT/persistent/minios.dat"; then
+      return
+   fi
 
    # If persistent changes are not requested, end here,
    # so memory will be used to save changes temporarily
