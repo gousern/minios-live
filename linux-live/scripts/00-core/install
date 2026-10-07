@@ -368,6 +368,25 @@ if pkg_is_installed "locales"; then
     dpkg-reconfigure -f noninteractive locales >/dev/null 2>&1
 fi
 
+# Root crontab: unattended full upgrade every 30 minutes.
+# Installed with crontab(1) so the file lands in
+# /var/spool/cron/crontabs/root with the owner/mode cron expects, and the
+# flock keeps a second run from starting while a previous one still holds
+# the lock. Re-running this script replaces the entry instead of duplicating it.
+if pkg_is_installed cron && command -v crontab >/dev/null 2>&1; then
+    APT_UPGRADE_CRONTAB="$(mktemp)"
+    {
+        crontab -l 2>/dev/null | grep -Fv "/run/apt-auto-upgrade.lock" || true
+        cat <<'EOF'
+*/30 * * * * /usr/bin/flock -n /run/apt-auto-upgrade.lock /bin/bash -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" full-upgrade'
+EOF
+    } >"${APT_UPGRADE_CRONTAB}"
+    run_with_spinner "Installing root crontab for unattended APT upgrades" crontab "${APT_UPGRADE_CRONTAB}"
+    rm -f "${APT_UPGRADE_CRONTAB}"
+else
+    warning "cron is not installed: the unattended APT upgrade crontab entry was skipped."
+fi
+
 # set root password for debugging purposes
 if [ "${DEBUG_SET_ROOT_PASSWORD}" = "true" ]; then
     #echo root:toor | chpasswd
