@@ -75,5 +75,36 @@ elif [ "${DESKTOP_ENVIRONMENT}" == "flux" ]; then
     done
 fi
 
+# Default add-ons and theme for new profiles.
+# The signed .xpi files are copied by rootcopy-install before this script runs;
+# their provenance lives in rootcopy-install/.../firefox-extensions/SOURCES.txt.
+EXTENSION_DIR="/usr/share/minios/firefox-extensions"
+FIREFOX_LIB_DIR="$(dirname "$(readlink -f "$(command -v "${PACKAGE}")")")"
+install -d "${FIREFOX_LIB_DIR}/distribution" "${FIREFOX_LIB_DIR}/defaults/pref"
+cat >"${FIREFOX_LIB_DIR}/distribution/policies.json" <<EOF
+{
+  "policies": {
+    "ExtensionSettings": {
+      "sqyt.co@gmail.com": {
+        "installation_mode": "force_installed",
+        "install_url": "file://${EXTENSION_DIR}/shortcuts.xpi"
+      },
+      "foxpilot@balakumar.dev": {
+        "installation_mode": "force_installed",
+        "install_url": "file://${EXTENSION_DIR}/foxpilot.xpi"
+      },
+      "{830f38bd-efc5-45dc-a5a6-064d9a638806}": {
+        "installation_mode": "force_installed",
+        "install_url": "file://${EXTENSION_DIR}/dark-mode.xpi"
+      }
+    }
+  }
+}
+EOF
+cat >"${FIREFOX_LIB_DIR}/defaults/pref/minios.js" <<'EOF'
+// MiniOS: compact dark theme for new profiles.
+pref("extensions.activeThemeID", "firefox-compact-dark@mozilla.org");
+EOF
+
 echo "PACKAGE=\"${PACKAGE}\"" >/.package
 echo "VERSION=\"$(dpkg -s "${PACKAGE}" | grep Version | sed 's/Version: //g' | sed 's/:/-/g')\"" >>/.package

@@ -1,0 +1,5 @@
+# MiniOS default Firefox add-ons: signed .xpi copied from AMO.
+# shortname  version          sha256                                                            amo url
+shortcuts    1.0.2resigned1   a272a6bb5404b77a19ea3962da20a46155bbaf2102ce5364a29dedaf5ac48faa   https://addons.mozilla.org/firefox/downloads/latest/shortcuts/latest.xpi
+foxpilot     1.0.22           dc02acefbc4e22d10a8829357a651c8fc069f376a90d6c739ea34b7ab8e50394   https://addons.mozilla.org/firefox/downloads/latest/foxpilot/latest.xpi
+dark-mode    2.3.0            f23038340a3cb61237f4cd56160dced0af489edf77fcd8de66c04b623c701a86   https://addons.mozilla.org/firefox/downloads/latest/dark-mode-by-albert-inc/latest.xpi
