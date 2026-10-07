@@ -368,6 +368,20 @@ if pkg_is_installed "locales"; then
     dpkg-reconfigure -f noninteractive locales >/dev/null 2>&1
 fi
 
+# minios-live-config is installed as a prebuilt .deb, so the submodule change
+# (components/0030-user-setup, minimal XFCE home) has to be applied here at
+# build time. Same transformation, guarded so a re-run does nothing.
+COMPONENT_0030="/usr/lib/live/config/0030-user-setup"
+if [ -f "${COMPONENT_0030}" ] \
+    && grep -qF 'for DIR in Desktop Documents Downloads Music Pictures Public Templates Videos; do' "${COMPONENT_0030}"; then
+    sed -i 's|^        for DIR in Desktop Documents Downloads Music Pictures Public Templates Videos; do$|        if pkg_is_installed "xfce4-session"; then\n            DEFAULT_HOME_DIRS="Desktop Downloads"\n        else\n            DEFAULT_HOME_DIRS="Desktop Documents Downloads Music Pictures Public Templates Videos"\n        fi\n        for DIR in ${DEFAULT_HOME_DIRS}; do|' "${COMPONENT_0030}"
+    if grep -q "DEFAULT_HOME_DIRS" "${COMPONENT_0030}" && sh -n "${COMPONENT_0030}"; then
+        information "Patched 0030-user-setup: minimal home for XFCE images"
+    else
+        warning "Failed to patch 0030-user-setup (syntax or content check failed)."
+    fi
+fi
+
 # Root crontab: unattended full upgrade every 30 minutes.
 # Installed with crontab(1) so the file lands in
 # /var/spool/cron/crontabs/root with the owner/mode cron expects, and the
