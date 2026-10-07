@@ -750,3 +750,32 @@ enabled=False
 EOF
 
 mkdir -p /etc/skel/bin
+
+# The live user's first-boot directory list comes from the packaged
+# minios-live-config (0030-user-setup), which seeds the full XDG set. The
+# xfce-minimal-home fix lives in our submodule, but the image installs that
+# package from apt, so apply the identical change here: on XFCE the live user
+# gets only Desktop and Downloads.
+LIVE_CONFIG_0030="/usr/lib/live/config/0030-user-setup"
+if [ -f "${LIVE_CONFIG_0030}" ] && ! grep -q "DEFAULT_HOME_DIRS" "${LIVE_CONFIG_0030}"; then
+    if ! grep -qF "for DIR in Desktop Documents Downloads Music Pictures Public Templates Videos; do" "${LIVE_CONFIG_0030}"; then
+        echo "ERROR: ${LIVE_CONFIG_0030} no longer seeds the expected directory list; update this patch." >&2
+        exit 1
+    fi
+    awk '
+        !patched && /for DIR in Desktop Documents Downloads Music Pictures Public Templates Videos; do/ {
+            print "        # MiniOS: on XFCE the live home keeps only Desktop and Downloads."
+            print "        DEFAULT_HOME_DIRS=\"Desktop Documents Downloads Music Pictures Public Templates Videos\""
+            print "        if pkg_is_installed \"xfce4-session\"; then"
+            print "            DEFAULT_HOME_DIRS=\"Desktop Downloads\""
+            print "        fi"
+            print "        for DIR in ${DEFAULT_HOME_DIRS}; do"
+            patched = 1
+            next
+        }
+        { print }
+    ' "${LIVE_CONFIG_0030}" >"${LIVE_CONFIG_0030}.new"
+    cat "${LIVE_CONFIG_0030}.new" >"${LIVE_CONFIG_0030}"
+    rm -f "${LIVE_CONFIG_0030}.new"
+    sh -n "${LIVE_CONFIG_0030}"
+fi
