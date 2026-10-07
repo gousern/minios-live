@@ -106,3 +106,5 @@ chk "旧 7 个 (de/es/fr/it/pt/ru/id) 已移除" \
 echo
 echo "== 结果: $pass 通过 / $fail 失败 =="
 echo "解出的 ISO 留在 $WORK/iso，各模块 root 在 $WORK/root.*"
+# Non-zero exit when a check failed, so CI can gate on this.
+[ "$fail" -eq 0 ] || exit 1

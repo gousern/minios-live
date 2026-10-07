@@ -324,6 +324,22 @@ jobs:
           path: ./output/*.iso
           retention-days: 7
 
+      - name: Verify ISO contents
+        run: |
+          set -o pipefail
+          chmod +x verify-iso.sh
+          ISO=$(ls ./output/*.iso | head -1)
+          echo "verifying: $ISO"
+          ./verify-iso.sh "$ISO" | tee verify-report.txt
+
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: verify-report
+          path: verify-report.txt
+          retention-days: 7
+
   release:
     needs: build
     runs-on: ubuntu-latest
