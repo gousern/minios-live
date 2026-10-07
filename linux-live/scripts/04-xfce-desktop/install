@@ -734,3 +734,19 @@ fi
 if [ "$PACKAGE_VARIANT" != "minimum" ]; then
     rm -f /usr/share/applications/taskmanager.desktop
 fi
+
+# New user homes default to Desktop, Downloads and bin only.
+# Trim the XDG dir set that user-setup seeds from /etc/skel ...
+install -d /etc/skel/.config
+cat >/etc/skel/.config/user-dirs.dirs <<'EOF'
+XDG_DESKTOP_DIR="$HOME/Desktop"
+XDG_DOWNLOAD_DIR="$HOME/Downloads"
+EOF
+
+# ... and stop xdg-user-dirs-update from re-adding the other directories
+# on the first login of a new user.
+cat >/etc/skel/.config/user-dirs.conf <<'EOF'
+enabled=False
+EOF
+
+mkdir -p /etc/skel/bin
