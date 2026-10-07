@@ -28,7 +28,7 @@
 	url = https://github.com/minios-linux/ntfs3-dkms
 [submodule "submodules/minios-live-config"]
 	path = submodules/minios-live-config
-	url = https://github.com/minios-linux/minios-live-config.git
+	url = https://github.com/gousern/minios-live-config.git
 [submodule "submodules/xlunch"]
 	path = submodules/xlunch
 	url = https://github.com/minios-linux/xlunch.git
