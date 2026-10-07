@@ -3,23 +3,8 @@ firefox +d=bionic || firefox-esr +dp=debian || firefox-esr +dp=ubuntu -d=bionic
 # English
 firefox-locale-en +{lo=C|lo=en_US|ml=true|kl=true} +d=bionic || firefox-esr-locale-en +{lo=C|lo=en_US|ml=true|kl=true} +dp=ubuntu -d=bionic
 
-# German
-firefox-locale-de +{lo=de_DE|ml=true|kl=true} +d=bionic || firefox-esr-l10n-de +{lo=de_DE|ml=true|kl=true} +dp=debian || firefox-esr-l10n-de +{lo=de_DE|ml=true|kl=true} +dp=ubuntu -d=bionic
+# Chinese (Traditional)
+firefox-locale-zh-hant +d=bionic || firefox-esr-l10n-zh-tw +dp=debian || firefox-esr-l10n-zh-tw +dp=ubuntu -d=bionic
 
-# Spanish
-firefox-locale-es +{lo=es_ES|ml=true|kl=true} +d=bionic || firefox-esr-l10n-es-es +{lo=es_ES|ml=true|kl=true} +dp=debian || firefox-esr-locale-es +{lo=es_ES|ml=true|kl=true} +dp=ubuntu -d=bionic
-
-# French
-firefox-locale-fr +{lo=fr_FR|ml=true|kl=true} +d=bionic || firefox-esr-l10n-fr +{lo=fr_FR|ml=true|kl=true} +dp=debian || firefox-esr-l10n-fr +{lo=fr_FR|ml=true|kl=true} +dp=ubuntu -d=bionic
-
-# Italian
-firefox-locale-it +{lo=it_IT|ml=true|kl=true} +d=bionic || firefox-esr-l10n-it +{lo=it_IT|ml=true|kl=true} +dp=debian || firefox-esr-l10n-it +{lo=it_IT|ml=true|kl=true} +dp=ubuntu -d=bionic
-
-# Portuguese
-firefox-locale-pt +{lo=pt_BR|ml=true|kl=true} +d=bionic || firefox-esr-l10n-pt-br +{lo=pt_BR|ml=true|kl=true} +dp=debian || firefox-esr-l10n-pt-br +{lo=pt_BR|ml=true|kl=true} +dp=ubuntu -d=bionic
-
-# Russian
-firefox-locale-ru +{lo=ru_RU|ml=true|kl=true} +d=bionic || firefox-esr-l10n-ru +{lo=ru_RU|ml=true|kl=true} +dp=debian || firefox-esr-l10n-ru +{lo=ru_RU|ml=true|kl=true} +dp=ubuntu -d=bionic
-
-# Indonesian
-firefox-locale-id +{lo=id_ID|ml=true|kl=true} +d=bionic || firefox-esr-l10n-id +{lo=id_ID|ml=true|kl=true} +dp=debian || firefox-esr-l10n-id +{lo=id_ID|ml=true|kl=true} +dp=ubuntu -d=bionic
+# Chinese (Simplified)
+firefox-locale-zh-hans +d=bionic || firefox-esr-l10n-zh-cn +dp=debian || firefox-esr-l10n-zh-cn +dp=ubuntu -d=bionic
