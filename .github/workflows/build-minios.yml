@@ -226,7 +226,26 @@ jobs:
           fi
           BASHRC
           
-          # 3h. Create ~/bin directory for user
+          # 3h. Mise configuration
+          mkdir -p config/includes.chroot/home/live/
+          cat > config/includes.chroot/home/live/.mise.toml << 'EOF'
+          [tools]
+          gh = "latest"
+          node = "latest"
+          bats = "latest"
+          black = "latest"
+          pi = "latest"
+          ruff = "latest"
+          shellcheck = "latest"
+          shfmt = "latest"
+          "aqua:firecracker-microvm/firecracker" = "latest"
+          lima = "latest"
+          microsandbox = "latest"
+          uv = "latest"
+          python = "latest"
+          EOF
+          
+          # 3i. Create ~/bin directory for user
           mkdir -p config/includes.chroot/home/live/bin/
           
           # ============================================
@@ -260,6 +279,11 @@ jobs:
           # Mise (live user only, installed via curl)
           if command -v curl &> /dev/null; then
               sudo -u live bash -c "curl https://mise.run | sh" || echo "WARNING: Mise installation failed"
+          fi
+          
+          # Mise tools installation
+          if command -v mise &> /dev/null && [ -f /home/live/.mise.toml ]; then
+              sudo -u live bash -c "eval \"\$(mise activate bash)\" && cd /home/live && mise install" || echo "WARNING: Mise tools installation failed"
           fi
           
           # Locale and Timezone
