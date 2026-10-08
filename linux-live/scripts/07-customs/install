@@ -59,6 +59,32 @@ fi
 curl -fsSL https://mise.run | MISE_INSTALL_PATH=/usr/local/bin/mise sh \
     || echo "WARNING: mise install failed"
 
+# Bake the mise toolchain declared in /home/live/.mise.toml (this module's
+# rootcopy-install, copied into the chroot before this hook runs) into the
+# image, so the live user gets the default tools offline on first boot.
+# Files land root-owned in /home/live, the same pattern the fonts bake
+# relies on; live-config chowns the home at first boot.
+if [ -f /home/live/.mise.toml ]; then
+    if [ "$VERBOSITY_LEVEL" -ge 1 ]; then
+        echo "Baking mise tools from /home/live/.mise.toml ..."
+    fi
+    (cd /home/live && HOME=/home/live /usr/local/bin/mise install) \
+        || echo "WARNING: mise tool bake failed"
+else
+    echo "WARNING: /home/live/.mise.toml not found; skipping mise tool bake"
+fi
+
+# Activate mise for interactive shells seeded from skel (guarded re-run).
+if [ -f /etc/skel/.bashrc ] && ! grep -q 'mise activate bash' /etc/skel/.bashrc; then
+    cat >>/etc/skel/.bashrc << 'MISE_EOF'
+
+# mise toolchain activation (https://mise.jdx.dev)
+if command -v mise >/dev/null 2>&1; then
+    eval "$(mise activate bash)"
+fi
+MISE_EOF
+fi
+
 # ============================================
 # Apply macOS-style keyboard shortcuts
 # ============================================
