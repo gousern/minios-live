@@ -29,6 +29,10 @@ declare -A TARGETS=(
   [extensions-dir]="usr/share/minios/firefox-extensions"
   [root-crontab]="var/spool/cron/crontabs/root"
   [config0030]="usr/lib/live/config/0030-user-setup"
+  [mise-toml]="home/live/.mise.toml"
+  [mise-bin]="home/live/.local/bin/mise"
+  [xfce-desktop-xml]="etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml"
+  [xfce-backdrop]="usr/share/backgrounds/minios6-standard.jpg"
 )
 echo "== 3. 定位目标文件所在模块 =="
 declare -A MOD_OF
@@ -96,6 +100,32 @@ if [ -f "$T" ]; then
   grep -n "DEFAULT_HOME_DIRS\|user-dirs.dirs" "$T" | head -6 | sed 's/^/       /'
   chk "含 DEFAULT_HOME_DIRS 分支(本次子模块改动)" grep -q "DEFAULT_HOME_DIRS" "$T"
 else echo "  [FAIL] 0030-user-setup 不在镜像里"; fail=$((fail+1)); fi
+
+echo "-- mise: 配置 + 可执行文件 --"
+MISE_TOML=$(R mise-toml)
+if [ -f "$MISE_TOML" ]; then
+  echo "     .mise.toml 内容:"; sed 's/^/       /' "$MISE_TOML"
+  chk ".mise.toml 存在于 ISO" test -f "$MISE_TOML"
+  # 验证包含至少 8 个工具
+  chk ".mise.toml 至少含 8 个工具" bash -c "[ \$(grep -cE '^[a-z].*=.*' '$MISE_TOML') -ge 8 ]"
+else echo "  [FAIL] .mise.toml 不在镜像里"; fail=$((fail+1)); fi
+MISE_BIN=$(R mise-bin)
+if [ -f "$MISE_BIN" ]; then
+  chk "mise 二进制文件存在" test -f "$MISE_BIN"
+else echo "  [FAIL] mise 不在镜像里"; fail=$((fail+1)); fi
+
+echo "-- xfce4-desktop: 背景图 zoom 模式 --"
+XD=$(R xfce-desktop-xml)
+if [ -f "$XD" ]; then
+  echo "     xfce4-desktop.xml 内容:"; sed 's/^/       /' "$XD"
+  chk "xfce4-desktop.xml 存在于 ISO" test -f "$XD"
+  chk "使用 last-image (现代格式)" grep -q "last-image" "$XD"
+  chk "image-style=5 (zoom 模式)" grep -q 'image-style.*5' "$XD"
+else echo "  [FAIL] xfce4-desktop.xml 不在镜像里"; fail=$((fail+1)); fi
+# 验证背景图文件存在
+if [ -f "$(R xfce-backdrop)" ]; then
+  chk "背景图文件存在 (minios6-standard.jpg)" test -f "$(R xfce-backdrop)"
+fi
 
 echo "-- 10-firefox: 语言包 (只留英语+中文) --"
 chk "含中文繁体 firefox-esr-l10n-zh-tw" grep -qx "firefox-esr-l10n-zh-tw" "$WORK/l10n.list"
