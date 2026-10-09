@@ -1487,3 +1487,15 @@ EOF
     [ "$status" -ne 0 ]
     ! grep -q overlay "$MINIOS_TEST_LOG"
 }
+
+@test "default union picks AUFS when the kernel supports it and OverlayFS otherwise" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    cmdline_value() { :; }
+
+    aufs_is_supported() { return 0; }
+    [ "$(get_union_fs)" = aufs ]
+
+    aufs_is_supported() { return 1; }
+    [ "$(get_union_fs)" = overlayfs ]
+}

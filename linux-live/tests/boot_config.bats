@@ -127,3 +127,52 @@ assert_kernel_lines() {
     grep -Fq 'local FRESH_START="Start without saving"' "${LIVE_ROOT}/minioslib"
     grep -Fq 'local COPY_RAM="Run from RAM"' "${LIVE_ROOT}/minioslib"
 }
+
+@test "GRUB menu boots AUFS by default and offers an OverlayFS submenu" {
+    SERIAL_CONSOLE="false"
+    create_config_files
+
+    local file
+    for file in \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg" \
+        "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg"; do
+        # Five entries per union filesystem, the second set behind one submenu
+        [ "$(grep -cE '^    linux .*union=aufs' "${file}")" -eq 5 ]
+        [ "$(grep -cE '^    linux .*union=overlayfs' "${file}")" -eq 5 ]
+        grep -Fq 'submenu "Boot with OverlayFS (default: AUFS)" {' "${file}"
+        # The entry GRUB selects automatically is the first AUFS one
+        grep -E '^    linux ' "${file}" | head -n 1 | grep -Fq 'union=aufs'
+        if command -v grub-script-check >/dev/null 2>&1; then
+            grub-script-check "${file}"
+        fi
+    done
+}
+
+@test "SYSLINUX menu boots AUFS and links to an OverlayFS twin" {
+    SERIAL_CONSOLE="false"
+    create_config_files
+
+    local lang_dir="${WORK_DIR}/image/${LIVEKITNAME}/boot/syslinux/lang"
+    local base twin
+
+    [ "$(find "${lang_dir}" -name '*.cfg' | wc -l)" -eq 18 ]
+
+    for base in "${lang_dir}"/*.cfg; do
+        case "${base}" in
+        *-overlayfs.cfg) continue ;;
+        esac
+        twin="${base%.cfg}-overlayfs.cfg"
+        [ -f "${twin}" ]
+
+        grep -Fq 'MENU ROWS 6' "${base}"
+        [ "$(grep -cE '^APPEND .*union=aufs' "${base}")" -eq 5 ]
+        [ "$(grep -cE '^APPEND .*union=overlayfs' "${base}")" -eq 0 ]
+        grep -Fq 'switch to OverlayFS' "${base}"
+        grep -Fq "CONFIG lang/$(basename "${twin}")" "${base}"
+
+        [ "$(grep -cE '^APPEND .*union=overlayfs' "${twin}")" -eq 5 ]
+        [ "$(grep -cE '^APPEND .*union=aufs' "${twin}")" -eq 0 ]
+        grep -Fq 'switch to AUFS (default)' "${twin}"
+        grep -Fq "CONFIG lang/$(basename "${base}")" "${twin}"
+    done
+}
