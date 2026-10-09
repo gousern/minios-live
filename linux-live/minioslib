@@ -2288,37 +2288,7 @@ LABEL en_US
 MENU LABEL English
 CONFIG lang/en_US.cfg
 
-LABEL ru_RU
-MENU LABEL Russian
-CONFIG lang/ru_RU.cfg
-
-LABEL de_DE
-MENU LABEL German
-CONFIG lang/de_DE.cfg
-
-LABEL es_ES
-MENU LABEL Spanish
-CONFIG lang/es_ES.cfg
-
-LABEL fr_FR
-MENU LABEL French
-CONFIG lang/fr_FR.cfg
-
-LABEL id_ID
-MENU LABEL Indonesian
-CONFIG lang/id_ID.cfg
-
-LABEL it_IT
-MENU LABEL Italian
-CONFIG lang/it_IT.cfg
-
-LABEL pt_BR
-MENU LABEL Portuguese (Brazil)
-CONFIG lang/pt_BR.cfg
-
-LABEL pt_PT
-MENU LABEL Portuguese (Portugal)
-CONFIG lang/pt_PT.cfg
+# Boot menu language: English only (all other boot menu languages removed)
 
 EOF
 
@@ -2524,94 +2494,7 @@ menuentry "English" {
     export lang_keyboard
     configfile /${LIVEKITNAME}/boot/grub/main.cfg
 }
-menuentry "Русский" {
-    lang="ru_RU"
-    lang_utf="ru_RU.UTF-8"
-    lang_timezone="Europe/Moscow"
-    lang_keyboard="us,ru"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Deutsch" {
-    lang="de_DE"
-    lang_utf="de_DE.UTF-8"
-    lang_timezone="Europe/Berlin"
-    lang_keyboard="us,de"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Español" {
-    lang="es_ES"
-    lang_utf="es_ES.UTF-8"
-    lang_timezone="Europe/Madrid"
-    lang_keyboard="us,es"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Français" {
-    lang="fr_FR"
-    lang_utf="fr_FR.UTF-8"
-    lang_timezone="Europe/Paris"
-    lang_keyboard="us,fr"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Bahasa Indonesia" {
-    lang="id_ID"
-    lang_utf="id_ID.UTF-8"
-    lang_timezone="Asia/Jakarta"
-    lang_keyboard="id"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Italiano" {
-    lang="it_IT"
-    lang_utf="it_IT.UTF-8"
-    lang_timezone="Europe/Rome"
-    lang_keyboard="us,it"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Português (Brasil)" {
-    lang="pt_BR"
-    lang_utf="pt_BR.UTF-8"
-    lang_timezone="America/Sao_Paulo"
-    lang_keyboard="us,br"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
-menuentry "Português (Portugal)" {
-    lang="pt_PT"
-    lang_utf="pt_PT.UTF-8"
-    lang_timezone="Europe/Lisbon"
-    lang_keyboard="us,pt"
-    export lang
-    export lang_utf
-    export lang_timezone
-    export lang_keyboard
-    configfile /${LIVEKITNAME}/boot/grub/main.cfg
-}
+# Boot menu language: English only (all other boot menu languages removed)
 
 # Help text handled by theme
 
