@@ -980,6 +980,9 @@ EOF
     persistence_requested
     printf '%s\n' 'boot=live toram=full perchmode=luks' >"$MINIOS_CMDLINE_FILE"
     persistence_requested
+    # A menu entry that only asks for the image to be prepared counts too.
+    printf '%s\n' 'boot=live toram=full perchformat=1' >"$MINIOS_CMDLINE_FILE"
+    persistence_requested
 }
 
 @test "toram copies changes only when explicit perch is present" {
@@ -1498,4 +1501,128 @@ EOF
 
     aufs_is_supported() { return 1; }
     [ "$(get_union_fs)" = overlayfs ]
+}
+
+@test "perchformat formats a blank changes image and mounts it in the same boot" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    IMAGE="$WORK/minios.dat"
+    dd if=/dev/zero of="$IMAGE" bs=1024 count=1024 2>/dev/null
+    MINIOS_PERCH_FORMAT_MIN_BYTES=1024
+    FS=""
+    cmdline_value() { [ "${1:-}" = perchformat ] && printf '1\n'; }
+    device_tag() { if [ "${2:-}" = TYPE ]; then printf '%s\n' "$FS"; fi; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; FS=ext4; return 0; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run user_image_changes "$WORK/changes" "$IMAGE"
+
+    [ "$status" -eq 0 ]
+    grep -Fq "mke2fs -q -t ext4 -F -m 0 -O ^has_journal -L persistence $IMAGE" "$MINIOS_TEST_LOG"
+    grep -Fqx -- "-o loop,errors=remount-ro $IMAGE $WORK/changes" "$MINIOS_TEST_LOG"
+}
+
+@test "a blank changes image is left alone unless the boot option asked for it" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    IMAGE="$WORK/minios.dat"
+    : >"$IMAGE"
+    cmdline_value() { :; }
+    device_tag() { :; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run user_image_changes "$WORK/changes" "$IMAGE"
+
+    [ "$status" -ne 0 ]
+    ! grep -q mke2fs "$MINIOS_TEST_LOG"
+    ! grep -q -- '-o loop' "$MINIOS_TEST_LOG"
+}
+
+@test "perchformat never overwrites an image that already has a filesystem" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    IMAGE="$WORK/minios.dat"
+    : >"$IMAGE"
+    cmdline_value() { [ "${1:-}" = perchformat ] && printf '1\n'; }
+    device_tag() { if [ "${2:-}" = TYPE ]; then printf 'vfat\n'; fi; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    mount() { printf '%s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run user_image_changes "$WORK/changes" "$IMAGE"
+
+    [ "$status" -ne 0 ]
+    ! grep -q mke2fs "$MINIOS_TEST_LOG"
+}
+
+@test "perchformat creates the Ventoy .dat image named by Ventoy config" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    VENTOY_MNT="$WORK/ventoy-mnt"
+    mkdir -p "$VENTOY_MNT/ventoy" "$VENTOY_MNT/persistence"
+    dd if=/dev/zero of="$VENTOY_MNT/persistence/minios.dat" bs=1024 count=1024 2>/dev/null
+    printf '%s\n' '{"persistence": [["VTOY_PERSISTENCE", "/ventoy/persistence/minios.dat", []]]}' \
+        >"$VENTOY_MNT/ventoy/ventoy.json"
+    MINIOS_VENTOY_MNT="$VENTOY_MNT"
+    MINIOS_PERCH_FORMAT_MIN_BYTES=1024
+    FS=""
+    cmdline_value() { [ "${1:-}" = perchformat ] && printf '1\n'; }
+    blkid() { case "$*" in *LABEL=Ventoy*) printf '/dev/sdb1\n' ;; esac; }
+    device_tag() { if [ "${2:-}" = TYPE ]; then printf '%s\n' "$FS"; fi; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; FS=ext4; return 0; }
+    mount() { printf 'mount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    umount() { printf 'umount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run perch_ventoy_dat_image
+
+    [ "$status" -eq 0 ]
+    # run merges stderr, so the formatting notice rides along with the path.
+    [[ "$output" == *"$VENTOY_MNT/persistence/minios.dat"* ]]
+    grep -Fq "mount -o rw /dev/sdb1 $VENTOY_MNT" "$MINIOS_TEST_LOG"
+    grep -Fq "mke2fs -q -t ext4 -F -m 0 -O ^has_journal -L persistence $VENTOY_MNT/persistence/minios.dat" \
+        "$MINIOS_TEST_LOG"
+}
+
+@test "an already prepared Ventoy .dat is used read-only without formatting" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    VENTOY_MNT="$WORK/ventoy-mnt"
+    mkdir -p "$VENTOY_MNT/persistence"
+    : >"$VENTOY_MNT/persistence/minios.dat"
+    MINIOS_VENTOY_MNT="$VENTOY_MNT"
+    cmdline_value() { :; }
+    blkid() { case "$*" in *LABEL=Ventoy*) printf '/dev/sdb1\n' ;; esac; }
+    device_tag() { if [ "${2:-}" = LABEL ]; then printf 'persistence\n'; fi; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    mount() { printf 'mount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    umount() { printf 'umount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run perch_ventoy_dat_image
+
+    [ "$status" -eq 0 ]
+    [ "$output" = "$VENTOY_MNT/persistence/minios.dat" ]
+    grep -Fq "mount -o ro /dev/sdb1 $VENTOY_MNT" "$MINIOS_TEST_LOG"
+    ! grep -q mke2fs "$MINIOS_TEST_LOG"
+}
+
+@test "a blank Ventoy .dat stays untouched when no menu option asked for it" {
+    # shellcheck source=/dev/null
+    . "$LIB"
+    VENTOY_MNT="$WORK/ventoy-mnt"
+    mkdir -p "$VENTOY_MNT/persistence"
+    : >"$VENTOY_MNT/persistence/minios.dat"
+    MINIOS_VENTOY_MNT="$VENTOY_MNT"
+    cmdline_value() { :; }
+    blkid() { case "$*" in *LABEL=Ventoy*) printf '/dev/sdb1\n' ;; esac; }
+    device_tag() { :; }
+    mke2fs() { printf 'mke2fs %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    mount() { printf 'mount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+    umount() { printf 'umount %s\n' "$*" >>"$MINIOS_TEST_LOG"; return 0; }
+
+    run perch_ventoy_dat_image
+
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+    ! grep -q mke2fs "$MINIOS_TEST_LOG"
+    grep -Fq "umount $VENTOY_MNT" "$MINIOS_TEST_LOG"
 }

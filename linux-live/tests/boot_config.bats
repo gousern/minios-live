@@ -136,10 +136,15 @@ assert_kernel_lines() {
     for file in \
         "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/main.cfg" \
         "${WORK_DIR}/image/${LIVEKITNAME}/boot/grub/grub.template.cfg"; do
-        # Five entries per union filesystem, the second set behind one submenu
-        [ "$(grep -cE '^    linux .*union=aufs' "${file}")" -eq 5 ]
-        [ "$(grep -cE '^    linux .*union=overlayfs' "${file}")" -eq 5 ]
+        # Six entries per union filesystem, the second set behind one submenu
+        [ "$(grep -cE '^    linux .*union=aufs' "${file}")" -eq 6 ]
+        [ "$(grep -cE '^    linux .*union=overlayfs' "${file}")" -eq 6 ]
         grep -Fq 'submenu "Boot with OverlayFS (default: AUFS)" {' "${file}"
+        # The blank persistence image can be formatted from the menu itself
+        [ "$(grep -c 'perchformat=1' "${file}")" -eq 2 ]
+        grep -cE '^    linux .*union=aufs .*perchformat=1' "${file}" | grep -Fxq 1
+        grep -cE '^    linux .*union=overlayfs .*perchformat=1' "${file}" | grep -Fxq 1
+        grep -Fq 'Start MiniOS and create the persistence image' "${file}"
         # The entry GRUB selects automatically is the first AUFS one
         grep -E '^    linux ' "${file}" | head -n 1 | grep -Fq 'union=aufs'
         if command -v grub-script-check >/dev/null 2>&1; then

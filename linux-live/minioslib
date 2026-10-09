@@ -2595,10 +2595,17 @@ menuentry "\$copyram" --class ram {
     linux /${LIVEKITNAME}/boot/${VMLINUZNAME} ${DEFAULT_SETTINGS} ${BOOT_SETTINGS} union=${UNION_FS} toram locales=\$lang_utf \$extra_params
     initrd /${LIVEKITNAME}/boot/${INITRFSNAME}
 }
+menuentry "Start MiniOS and create the persistence image" --class mkfs {
+    echo \$loading
+    search --set -f /${LIVEKITNAME}/boot/${VMLINUZNAME}
+    set gfxpayload=\$gfxpayload
+    linux /${LIVEKITNAME}/boot/${VMLINUZNAME} ${DEFAULT_SETTINGS} ${BOOT_SETTINGS} union=${UNION_FS} perchdir=resume perchformat=1 locales=\$lang_utf \$extra_params
+    initrd /${LIVEKITNAME}/boot/${INITRFSNAME}
+}
 EOF
     }
 
-    # The same five entries as plain English text, for grub.template.cfg.
+    # The same entries as plain English text, for grub.template.cfg.
     # $1 = value for the union= kernel parameter (aufs or overlayfs)
     grub_template_menu_entries() {
         local UNION_FS="$1"
@@ -2636,6 +2643,13 @@ menuentry "Run from RAM" --class ram {
     search --set -f /${LIVEKITNAME}/boot/${VMLINUZNAME}
     set gfxpayload=\$gfxpayload
     linux /${LIVEKITNAME}/boot/${VMLINUZNAME} ${DEFAULT_SETTINGS} ${BOOT_SETTINGS} union=${UNION_FS} toram
+    initrd /${LIVEKITNAME}/boot/${INITRFSNAME}
+}
+menuentry "Start MiniOS and create the persistence image" --class mkfs {
+    echo \$message
+    search --set -f /${LIVEKITNAME}/boot/${VMLINUZNAME}
+    set gfxpayload=\$gfxpayload
+    linux /${LIVEKITNAME}/boot/${VMLINUZNAME} ${DEFAULT_SETTINGS} ${BOOT_SETTINGS} union=${UNION_FS} perchdir=resume perchformat=1
     initrd /${LIVEKITNAME}/boot/${INITRFSNAME}
 }
 EOF

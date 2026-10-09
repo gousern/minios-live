@@ -1680,7 +1680,7 @@ cmdline_requests_persistence() {
    local TOKEN
    for TOKEN in $(cat "$MINIOS_CMDLINE_FILE" 2>/dev/null); do
       case "$TOKEN" in
-      perch | perchdir=* | perchmode=* | perchsize=* | perchreserve=*) return 0 ;;
+      perch | perchdir=* | perchmode=* | perchsize=* | perchreserve=* | perchformat=*) return 0 ;;
       esac
    done
    return 1
@@ -2416,6 +2416,132 @@ squashfs_generation_restore() {
    SQUASHFS_ACTIVE_GENERATION="current"
 }
 
+# ---------------------------------------------------------------------------
+# perchformat=1: build the persistence image from the boot menu
+#
+# A GRUB menu entry passes perchformat=1 so a still blank image can be turned
+# into ext4 here, instead of requiring another operating system to prepare the
+# USB stick. Anything that already carries a filesystem or a partition table is
+# refused, so formatting can only ever touch a store with no data on it.
+# ---------------------------------------------------------------------------
+
+perch_format_requested() {
+   [ "$(cmdline_value perchformat)" = "1" ]
+}
+
+# $1 = file or block device
+perch_target_is_blank() {
+   [ -z "$(device_tag "$1" TYPE)" ] && [ -z "$(device_tag "$1" PTTYPE)" ]
+}
+
+# Format one blank target as the ext4 persistence store MiniOS greps for.
+# $1 = file or block device
+perch_format_target() {
+   local TARGET="$1" BYTES MIN="${MINIOS_PERCH_FORMAT_MIN_BYTES:-268435456}"
+
+   if ! command -v mke2fs >/dev/null 2>&1; then
+      echo_yellow_star
+      echo "perchformat: mke2fs is unavailable, $(basename "$TARGET") was not formatted"
+      return 1
+   fi
+   if ! perch_target_is_blank "$TARGET"; then
+      echo_yellow_star
+      echo "perchformat: $(basename "$TARGET") already carries a filesystem, leaving it alone"
+      return 1
+   fi
+   if [ -f "$TARGET" ]; then
+      BYTES=$(du -b "$TARGET" 2>/dev/null | awk '{print $1; exit}')
+      case "$BYTES" in
+      '' | *[!0-9]*) BYTES=0 ;;
+      esac
+      if [ "$BYTES" -lt "$MIN" ]; then
+         echo_yellow_star
+         echo "perchformat: $(basename "$TARGET") is only ${BYTES} bytes, need at least ${MIN}"
+         return 1
+      fi
+   fi
+   echo_yellow_star
+   echo "perchformat: formatting $(basename "$TARGET") as ext4 with label persistence"
+   if ! mke2fs -q -t ext4 -F -m 0 -O '^has_journal' -L persistence "$TARGET" >/dev/null 2>&1; then
+      echo_red_star
+      echo "perchformat: mke2fs failed on $(basename "$TARGET")"
+      return 1
+   fi
+   return 0
+}
+
+# Emit every *.dat image on a mounted Ventoy partition, the ones Ventoy's own
+# configuration names first.
+# $1 = mounted Ventoy partition
+perch_ventoy_dat_candidates() {
+   local MNT="$1" CFG RAW RESOLVED
+
+   for CFG in "$MNT/ventoy/ventoy.json" "$MNT/ventoy/ventoy.conf" "$MNT/ventoy.conf"; do
+      [ -f "$CFG" ] || continue
+      grep -o '"[^" ]*\.dat"' "$CFG" 2>/dev/null | tr -d '"' |
+         while IFS= read -r RAW; do
+            [ -n "$RAW" ] || continue
+            for RESOLVED in "$MNT/${RAW#/}" "$MNT/${RAW#/ventoy/}"; do
+               if [ -f "$RESOLVED" ]; then
+                  printf '%s\n' "$RESOLVED"
+                  break
+               fi
+            done
+         done
+   done
+   find "$MNT" -maxdepth 4 -type f -name '*.dat' 2>/dev/null
+}
+
+# Locate the persistence image on the Ventoy partition. Ventoy reads its own
+# configuration for that image, but a blank one still needs ext4, which a GRUB
+# boot option can ask for here. The partition stays mounted so the image can be
+# loop mounted afterwards.
+# Prints the image path when one can be used, returns 1 when there is none.
+perch_ventoy_dat_image() {
+   local PART MNT OPTS CANDIDATES CANDIDATE USED=""
+
+   PART=$(blkid -t LABEL=Ventoy -o device -c /dev/null 2>/dev/null | sed -n 1p)
+   [ -n "$PART" ] || return 1
+   # Without MEMORY (or an explicit mount point) this is not an initramfs boot:
+   # never go probing block devices from somewhere that is not MiniOS.
+   MNT="${MINIOS_VENTOY_MNT:-}"
+   if [ -z "$MNT" ]; then
+      [ -n "${MEMORY:-}" ] || return 1
+      MNT="$MEMORY/ventoy"
+   fi
+   mkdir -p "$MNT" 2>/dev/null || return 1
+
+   OPTS="ro"
+   perch_format_requested && OPTS="rw"
+   if ! mount -o "$OPTS" "$PART" "$MNT" >/dev/null 2>&1; then
+      echo_yellow_star
+      echo "perchformat: cannot mount Ventoy partition $PART ($OPTS), no image found"
+      return 1
+   fi
+
+   CANDIDATES=$(perch_ventoy_dat_candidates "$MNT")
+   # The list is newline separated; read it as is so paths survive whole.
+   while IFS= read -r CANDIDATE; do
+      [ -n "$CANDIDATE" ] || continue
+      if perch_format_requested && perch_format_target "$CANDIDATE" >&2; then
+         USED="$CANDIDATE"
+         break
+      fi
+      if [ "$(device_tag "$CANDIDATE" LABEL)" = "persistence" ]; then
+         USED="$CANDIDATE"
+         break
+      fi
+   done <<-PERCH_DAT_EOF
+$CANDIDATES
+PERCH_DAT_EOF
+
+   if [ -z "$USED" ]; then
+      umount "$MNT" 2>/dev/null || true
+      return 1
+   fi
+   printf '%s\n' "$USED"
+}
+
 # Activate persistent changes
 # $1 = data directory
 # $2 = target changes directory
@@ -2436,6 +2562,12 @@ user_image_changes() {
    for CANDIDATE in "$@"; do
       [ -f "$CANDIDATE" ] || continue
       TYPE=$(device_tag "$CANDIDATE" TYPE)
+      # perchformat=1 turns a still blank image into the store we can use.
+      if [ -z "$TYPE" ] && perch_format_requested; then
+         if perch_format_target "$CANDIDATE"; then
+            TYPE=$(device_tag "$CANDIDATE" TYPE)
+         fi
+      fi
       case "$TYPE" in
       ext2 | ext3 | ext4) ;;
       *)
@@ -2467,7 +2599,7 @@ user_image_changes() {
 #
 persistent_changes() {
    debug_log "persistent_changes" "$*"
-   local DATA CHANGES DRIVE CHANDIR PERCHDIR PERCHSIZE PERCHFILE FS_TYPE PERCHFILE_EXISTS SPECIFIED AVAILABLE_SPACE MAX_SIZE MOUNT_OPTS PERCHMODE ACTION PERCHSESSION CURRENT_SIZE CURRENT_USAGE NEW_SESSION AUTO_RESUME
+   local DATA CHANGES DRIVE CHANDIR PERCHDIR PERCHSIZE PERCHFILE FS_TYPE PERCHFILE_EXISTS SPECIFIED AVAILABLE_SPACE MAX_SIZE MOUNT_OPTS PERCHMODE ACTION PERCHSESSION CURRENT_SIZE CURRENT_USAGE NEW_SESSION AUTO_RESUME VENTOYDAT
 
    DATA="$1"
    CHANGES="$2"
@@ -3003,10 +3135,19 @@ persistent_changes() {
    # Setup the directory anyway, it will be used in all cases
    mkdir -p "$CHANGES"
 
+   # Ventoy keeps its persistence image as a .dat named by its own
+   # configuration. Hunting for it only makes sense when this boot wants
+   # persistence, or when a menu entry asked us to format it.
+   VENTOYDAT=""
+   if persistence_requested || perch_format_requested; then
+      VENTOYDAT=$(perch_ventoy_dat_image) || VENTOYDAT=""
+   fi
+
    # A pre-created ext4 image file is the simplest persistence to set up and
    # survives a USB stick being wiped of partitions. Honour it before any
    # session logic so a hand-made image always wins.
    if user_image_changes "$CHANGES" \
+      ${VENTOYDAT:+"$VENTOYDAT"} \
       "$DATA/minios.dat" \
       "$DATAMNT/minios.dat" \
       "$DATAMNT/storage/minios.dat" \
