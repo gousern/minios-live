@@ -15,9 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Clone minios-live Repository
+      env:
+        REF: ${{ github.event.inputs.tag }}
       run: |
-        git clone --depth 1 --branch ${{ github.event.inputs.tag }} ${{ github.server_url }}/${{ github.repository }}.git
-        cd minios-live
+        repo="${{ github.server_url }}/${{ github.repository }}.git"
+        if ! git ls-remote --exit-code "$repo" "refs/heads/$REF" "refs/tags/$REF" >/dev/null; then
+          echo "::error::Ref '$REF' does not exist in ${{ github.repository }}. Push the tag first: git tag '$REF' && git push origin '$REF'"
+          echo "Available tags:"
+          git ls-remote --tags "$repo" | awk -F/ '{print $NF}' | grep -v '\^{}' | sort -V | tail -n 15
+          exit 1
+        fi
+        git clone --depth 1 --branch "$REF" "$repo"
+        git -C minios-live log -1 --oneline
 
     - name: Install dependencies
       run: |
@@ -48,8 +57,9 @@ jobs:
     - name: Verify ISO contents
       run: |
         set -o pipefail
+        cd minios-live || exit 1
         chmod +x verify-iso.sh
-        ISO=$(ls build/iso/*.iso | head -1)
+        ISO=$(ls build/output/trixie-xfce-toolbox-amd64/*.iso | head -1)
         echo "verifying: $ISO"
         ./verify-iso.sh "$ISO" | tee verify-report.txt
 

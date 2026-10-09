@@ -351,10 +351,10 @@ jobs:
       - name: Verify ISO contents
         run: |
           set -o pipefail
-          chmod +x verify-iso.sh
+          chmod +x minios-live/verify-iso.sh
           ISO=$(ls ./output/*.iso | head -1)
           echo "verifying: $ISO"
-          ./verify-iso.sh "$ISO" | tee verify-report.txt
+          ./minios-live/verify-iso.sh "$ISO" | tee verify-report.txt
 
       - name: Upload verification report
         if: always()
