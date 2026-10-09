@@ -7,6 +7,11 @@ on:
         description: 'Release tag'
         required: true
 
+# The repo default workflow token is read-only; the release job needs to
+# create the release and upload the ISO assets.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -73,6 +78,9 @@ jobs:
         run: |
           repo=${{ github.repository }}
           tag_name=${{ steps.set_tag.outputs.tag_name }}
+          # Create the release if it does not exist yet.
+          gh release view "$tag_name" --repo "$repo" >/dev/null 2>&1 || \
+            gh release create "$tag_name" --repo "$repo" --title "$tag_name" --generate-notes
           for artifact_dir in ./artifacts/*; do
             for artifact in "$artifact_dir"/*; do
               gh release upload "$tag_name" "$artifact" --repo "$repo" --clobber

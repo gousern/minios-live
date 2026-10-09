@@ -5,6 +5,12 @@ on:
     tags:
       - 'v*'
 
+# The repo default workflow token is read-only; creating the release and
+# dispatching the build workflows requires write access.
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
