@@ -39,6 +39,16 @@ jobs:
         sudo mv build/iso/*.sha256 build/output/trixie-xfce-standard-amd64/ || true
         echo "Build completed for Debian 13 XFCE Standard amd64."
 
+    - name: Verify ISO contents
+      run: |
+        set -o pipefail
+        cd minios-live
+        chmod +x verify-iso.sh
+        # The build step already moved the ISO into build/output/<variant>/.
+        ISO=$(ls build/output/trixie-xfce-standard-amd64/*.iso | head -1)
+        echo "verifying: $ISO"
+        ./verify-iso.sh "$ISO" | tee verify-report.txt
+
     - name: Archive build output - Debian 13 XFCE Standard amd64
       uses: actions/upload-artifact@v4
       with:

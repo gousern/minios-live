@@ -48,8 +48,10 @@ jobs:
     - name: Verify ISO contents
       run: |
         set -o pipefail
+        cd minios-live
         chmod +x verify-iso.sh
-        ISO=$(ls build/iso/*.iso | head -1)
+        # The build step already moved the ISO into build/output/<variant>/.
+        ISO=$(ls build/output/trixie-xfce-toolbox-amd64/*.iso | head -1)
         echo "verifying: $ISO"
         ./verify-iso.sh "$ISO" | tee verify-report.txt
 
