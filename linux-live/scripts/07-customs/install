@@ -191,4 +191,20 @@ if [ -d /home/live ]; then
     cp -a /etc/skel/. /home/live/
 fi
 
+# ============================================
+# Bake correct ownership into /home/live
+# ============================================
+# Everything above (mise installs, skel seed, font bake) lands in
+# /home/live root-owned. At first boot live-config runs chown -R on this
+# tree; on an OverlayFS union every entry of that chown is copied up in
+# full, which measured ~90s of boot stall for the ~1GB of baked files.
+# The live account does not exist in this chroot (user-setup creates it
+# at first boot with the uid/gid hardcoded as 1000 in
+# components/0030-user-setup), so chown numerically. -h keeps symlink
+# ownership on the link itself, never on its target.
+if [ -d /home/live ]; then
+    echo "Baking ownership of /home/live to 1000:1000..."
+    find /home/live \( ! -uid 1000 -o ! -gid 1000 \) -exec chown -h 1000:1000 {} +
+fi
+
 echo "Custom packages installed successfully."

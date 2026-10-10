@@ -98,7 +98,43 @@ T=$(R config0030)
 if [ -f "$T" ]; then
   grep -n "DEFAULT_HOME_DIRS\|user-dirs.dirs" "$T" | head -6 | sed 's/^/       /'
   chk "含 DEFAULT_HOME_DIRS 分支(本次子模块改动)" grep -q "DEFAULT_HOME_DIRS" "$T"
+  # 慢启动根因: 无条件 chown -R 会在 OverlayFS 上逐项全量 copy-up
+  chk "chown 已改为 find 守卫 (0030)" grep -qF 'find "/home/${LIVE_USERNAME}"' "$T"
+  chk "无条件 chown -R 已移除 (0030)" bash -c "! grep -qF 'chown -R \${LIVE_USERNAME}:\${LIVE_USERNAME} /home/\${LIVE_USERNAME}' '$T'"
 else echo "  [FAIL] 0030-user-setup 不在镜像里"; fail=$((fail+1)); fi
+
+echo "-- /home/live 属主烘焙 (防首启 chown 全量 copy-up) --"
+HCHECK="$WORK/homecheck.list"
+: >"$HCHECK"
+for m in "${MODS[@]}"; do
+  b=$(basename "$m")
+  unsquashfs -lln "$m" 2>/dev/null | awk -v mod="$b" '$6 ~ /^squashfs-root\/home\/live(\/|$)/ {print mod"\t"$2"\t"$6}' >>"$HCHECK"
+done
+if [ -s "$HCHECK" ]; then
+  HN=$(wc -l <"$HCHECK")
+  HBAD=$(awk -F'\t' '$2 != "1000/1000"' "$HCHECK" | wc -l)
+  echo "     镜像内 home/live 条目: $HN, 非 1000/1000: $HBAD"
+  [ "$HBAD" -gt 0 ] && awk -F'\t' '$2 != "1000/1000"' "$HCHECK" | head -5 | sed 's/^/       /'
+  chk "home/live 全部烘焙为 1000/1000" test "$HBAD" -eq 0
+else
+  echo "  [FAIL] 镜像里没有 home/live 条目"; fail=$((fail+1))
+fi
+
+echo "-- GRUB/SYSLINUX 启动菜单 (AUFS + OverlayFS 双入口) --"
+GB="$WORK/iso/minios/boot/grub/main.cfg"
+SB="$WORK/iso/minios/boot/syslinux"
+if [ -f "$GB" ]; then
+  chk "main.cfg 含 union=aufs 菜单项" grep -q 'union=aufs' "$GB"
+  chk "main.cfg 含 union=overlayfs 子菜单" bash -c "grep -q 'submenu.*OverlayFS' '$GB' && grep -q 'union=overlayfs' '$GB'"
+  chk "main.cfg 含 persistence image 创建项 (aufs+overlayfs 各一)" bash -c "[ \$(grep -c 'perchformat=1' '$GB') -eq 2 ]"
+else echo "  [FAIL] grub main.cfg 不在 ISO 里"; fail=$((fail+1)); fi
+if [ -d "$SB/lang" ]; then
+  NL=$(find "$SB/lang" -name '*.cfg' ! -name '*-overlayfs.cfg' | wc -l)
+  NO=$(find "$SB/lang" -name '*-overlayfs.cfg' | wc -l)
+  chk "每个语种都有 overlayfs 双生菜单 ($NL/$NO)" test "$NL" -eq "$NO"
+  chk "syslinux en_US.cfg 含 union=aufs" grep -q 'union=aufs' "$SB/lang/en_US.cfg"
+  chk "syslinux en_US-overlayfs.cfg 含 union=overlayfs" grep -q 'union=overlayfs' "$SB/lang/en_US-overlayfs.cfg"
+else echo "  [FAIL] syslinux lang 目录不在 ISO 里"; fail=$((fail+1)); fi
 
 echo "-- mise: 二进制 + 配置 + 工具烘焙 --"
 MISE_BIN=$(R mise-bin)

@@ -382,6 +382,27 @@ if [ -f "${COMPONENT_0030}" ] \
     fi
 fi
 
+# Same component, second problem: 0030-user-setup ends with an unconditional
+# "chown -R ${LIVE_USERNAME}:${LIVE_USERNAME} /home/...". On an OverlayFS
+# union every file of that chown is copied up in full (metacopy=off), which
+# measured ~90s of first-boot stall for the ~1GB of mise-baked files under
+# /home/live. Replace it with a find guard that only chowns entries that are
+# actually misowned; on a correctly-owned tree (built by the matching fix in
+# scripts/07-customs/install) the chown is skipped entirely. chown -h keeps
+# symlink targets untouched, same as the original chown -R semantics.
+# Guarded by the original line, so a re-run does nothing.
+if [ -f "${COMPONENT_0030}" ] \
+    && grep -qF 'chown -R ${LIVE_USERNAME}:${LIVE_USERNAME} /home/${LIVE_USERNAME}' "${COMPONENT_0030}"; then
+    sed -i 's@^        chown -R \${LIVE_USERNAME}:\${LIVE_USERNAME} /home/\${LIVE_USERNAME} .*$@        find "/home/${LIVE_USERNAME}" \\( ! -user "${LIVE_USERNAME}" -o ! -group "${LIVE_USERNAME}" \\) -exec chown -h "${LIVE_USERNAME}:${LIVE_USERNAME}" {} + || echo "Failed to set ownership recursively for /home/${LIVE_USERNAME}"@' "${COMPONENT_0030}"
+    if grep -qF 'find "/home/${LIVE_USERNAME}"' "${COMPONENT_0030}" \
+        && ! grep -qF 'chown -R ${LIVE_USERNAME}:${LIVE_USERNAME} /home/${LIVE_USERNAME}' "${COMPONENT_0030}" \
+        && sh -n "${COMPONENT_0030}"; then
+        information "Patched 0030-user-setup: guarded home chown (overlayfs copy-up stall)"
+    else
+        warning "Failed to patch 0030-user-setup chown guard (syntax or content check failed)."
+    fi
+fi
+
 # Root crontab: unattended full upgrade every 30 minutes.
 # Installed with crontab(1) so the file lands in
 # /var/spool/cron/crontabs/root with the owner/mode cron expects, and the
